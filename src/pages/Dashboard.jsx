@@ -10,6 +10,7 @@ import StageBadge from '../components/StageBadge'
 import Spinner from '../components/Spinner'
 import OpenAsksPanel from '../components/OpenAsksPanel'
 import TaskDetailPanel from '../components/TaskDetailPanel'
+import ChatPanel from '../components/ChatPanel'
 
 function fmt(n) {
   if (!n) return '$0'
@@ -130,7 +131,10 @@ export default function Dashboard() {
   const hasAttention = overdueTasks.length > 0 || dueSoonTasks.length > 0 || atRiskSignals.length > 0
 
   return (
-    <div className="p-8 max-w-7xl mx-auto">
+    <div className="flex h-full overflow-hidden">
+    {/* ── Main dashboard content ── */}
+    <div className="flex-1 overflow-y-auto p-8 min-w-0">
+    <div className="max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -482,6 +486,13 @@ export default function Dashboard() {
           onClose={() => setSelectedTask(null)}
         />
       )}
+    </div>
+    </div>
+
+    <div className="w-80 flex-shrink-0 border-l border-gray-100 bg-white flex flex-col h-full">
+      <ChatPanel defaultPodId={activePodId} />
+    </div>
+
     </div>
   )
 }
