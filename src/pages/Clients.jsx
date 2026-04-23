@@ -128,8 +128,10 @@ export default function Clients() {
   const [transferClient, setTransferClient] = useState(null)
   const [searchParams, setSearchParams] = useSearchParams()
 
-  // Only C2C GM can transfer — GM role AND pod_id === C2C_POD_ID
-  const isC2cGm = role === 'GM' && Number(user?.zampian?.pod_id) === C2C_POD_ID
+  // Who can initiate a transfer:
+  //   - GM whose pod_id === C2C_POD_ID
+  //   - SUPERADMIN regardless of pod (full access)
+  const isC2cGm = role === 'SUPERADMIN' || (role === 'GM' && Number(user?.zampian?.pod_id) === C2C_POD_ID)
 
   // If Dashboard linked here with ?pod=<id>, resolve that to a pod name for the filter
   const podIdFromQuery = searchParams.get('pod')
@@ -149,7 +151,8 @@ export default function Clients() {
 
   // Once pods have loaded, resolve the filter in priority order:
   //   1. ?pod=<id> in the URL  → filter to that pod, then clear the param
-  //   2. No URL param          → default to the user's own pod (all pod-scoped roles incl. GM)
+  //   2. No URL param          → default to the user's own pod if they have one
+  //      (applies to ALL roles that have a pod_id, including SUPERADMIN)
   useEffect(() => {
     if (!pods.length) return // wait until pods are fetched
 
@@ -159,10 +162,13 @@ export default function Clients() {
       const next = new URLSearchParams(searchParams)
       next.delete('pod')
       setSearchParams(next, { replace: true })
-    } else if (POD_SCOPED_ROLES.includes(role)) {
-      // No URL param: default to the user's own pod (only on first load)
-      const userPodName = pods.find(p => String(p.id) === String(user?.zampian?.pod_id))?.name
-      if (userPodName) setPodFilter(prev => prev.length === 0 ? [userPodName] : prev)
+    } else {
+      // No URL param: seed from user's pod_id if they have one (first load only)
+      const userPodId = user?.zampian?.pod_id
+      if (userPodId) {
+        const userPodName = pods.find(p => String(p.id) === String(userPodId))?.name
+        if (userPodName) setPodFilter(prev => prev.length === 0 ? [userPodName] : prev)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pods])

@@ -65,9 +65,11 @@ export default function Dashboard() {
   // Determine if this user can toggle between views
   const canSeeOrgView = !role || ORG_VIEW_ROLES.includes(role)
 
-  // Default view: pod-only roles always land on pod view; org roles land on org view
+  // Default view:
+  //   - If user has a pod_id (any role, including SUPERADMIN/GM), land on pod view
+  //   - CEO or roleless users with no pod_id land on org view
   const [viewMode, setViewMode] = useState(() =>
-    canSeeOrgView ? 'org' : 'pod'
+    (canSeeOrgView && !userPodId) ? 'org' : 'pod'
   )
 
   // For SUPERADMIN/CEO in pod view, allow selecting which pod to inspect
