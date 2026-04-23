@@ -21,7 +21,7 @@ function ProtectedRoute({ children }) {
 
 function LoginRoute() {
   const { user } = useAuth()
-  if (user) return <Navigate to="/" replace />
+  if (user) return <Navigate to="/dashboard" replace />
   return <Login />
 }
 
@@ -36,7 +36,8 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        <Route path="dashboard" element={<Dashboard />} />
         <Route path="clients" element={<Clients />} />
         <Route path="clients/:id" element={<ClientDetail />} />
         <Route path="tasks" element={<Tasks />} />
@@ -46,7 +47,7 @@ export default function App() {
         <Route path="pods" element={<Pods />} />
         <Route path="settings" element={<Settings />} />
         <Route path="revenue" element={<Revenue />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
   )

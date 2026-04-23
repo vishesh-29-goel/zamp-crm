@@ -12,7 +12,7 @@ import { useApprovals, useNotifications, useMarkRead, useMarkAllRead } from '../
 const APPROVER_ROLES = ['CEO', 'GM', 'SUPERADMIN']
 
 const BASE_NAV = [
-  { to: '/',          icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/clients',   icon: Users,           label: 'Clients'   },
   { to: '/pods',      icon: Layers,          label: 'Pods'      },
   { to: '/tasks',     icon: CheckSquare,     label: 'My Tasks'  },
@@ -203,7 +203,7 @@ export default function Layout() {
             <NavLink
               key={to}
               to={to}
-              end={to === '/'}
+              end={to === '/dashboard'}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
                 ${isActive
