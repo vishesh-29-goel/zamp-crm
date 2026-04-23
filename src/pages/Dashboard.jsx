@@ -65,15 +65,15 @@ export default function Dashboard() {
   // Determine if this user can toggle between views
   const canSeeOrgView = !role || ORG_VIEW_ROLES.includes(role)
 
+  // Must be declared BEFORE useState that references it
+  const userPodId = user?.zampian?.pod_id ?? null
+
   // Default view:
   //   - If user has a pod_id (any role, including SUPERADMIN/GM), land on pod view
   //   - CEO or roleless users with no pod_id land on org view
   const [viewMode, setViewMode] = useState(() =>
     (canSeeOrgView && !userPodId) ? 'org' : 'pod'
   )
-
-  // For SUPERADMIN/CEO in pod view, allow selecting which pod to inspect
-  const userPodId = user?.zampian?.pod_id ?? null
   const [selectedPodId, setSelectedPodId] = useState(userPodId)
   const [attentionTab, setAttentionTab] = useState('overdue') // 'overdue' | 'soon' | 'risk'
   const [selectedTask, setSelectedTask] = useState(null)
