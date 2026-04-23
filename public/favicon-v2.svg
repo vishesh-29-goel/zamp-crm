@@ -1,0 +1,10 @@
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark rounded background -->
+  <rect width="32" height="32" rx="7" fill="#171717"/>
+  <!-- Zamp icon mark (two stripes), scaled and centered in 32x32 -->
+  <!-- Original viewBox 0 0 16 16, scaled ~1.5x and centered -->
+  <g transform="translate(4, 6) scale(1.5)">
+    <path d="M1.85714 1H14.8571L13.2063 6.31818H0L1.85714 1Z" fill="white"/>
+    <path d="M3 8.68182H16L14.3492 14H1.14286L3 8.68182Z" fill="white"/>
+  </g>
+</svg>
