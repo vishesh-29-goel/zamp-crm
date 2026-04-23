@@ -1,4 +1,4 @@
-import { createContext, useContext, useState } from 'react'
+import { createContext, useContext, useState, useEffect } from 'react'
 import { api } from './api'
 
 const AuthContext = createContext(null)
@@ -53,6 +53,19 @@ export function AuthProvider({ children }) {
     setUser(u)
     return u
   }
+
+  // On mount, always refresh from /api/me so stale localStorage never causes RBAC bugs
+  useEffect(() => {
+    if (user?.email) {
+      fetchZampian(user.email).then(zampian => {
+        if (!zampian) return
+        const updated = { ...user, zampian }
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updated))
+        setUser(updated)
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Call this after any role change to get fresh permissions without a full sign-out
   const refreshZampian = async () => {
