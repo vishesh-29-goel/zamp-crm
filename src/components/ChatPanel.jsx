@@ -25,11 +25,12 @@ function Message({ msg }) {
           : <Bot className="w-3 h-3 text-zamp-600" />
         }
       </div>
-      <div className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap ${
+      <div className={`max-w-[82%] px-3.5 py-2.5 rounded-2xl text-sm leading-relaxed whitespace-pre-wrap break-words ${
         isUser
           ? 'bg-zamp-600 text-white rounded-tr-sm'
           : 'bg-gray-50 border border-gray-100 text-gray-800 rounded-tl-sm'
-      }`}>
+      }`}
+      style={{ overflowWrap: 'anywhere' }}>
         {msg.content}
       </div>
     </div>
