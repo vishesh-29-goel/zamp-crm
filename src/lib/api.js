@@ -112,4 +112,7 @@ export const api = {
   podTransfersCount:    ()              => http.get('/pod-transfers/count'),
   createPodTransfer:    (body)          => http.post('/pod-transfers', body),
   resolvePodTransfer:   (id, body)      => http.patch(`/pod-transfers/${id}`, body),
+
+  // Ask Pace — LLM-backed chat over pod-scoped CRM data
+  chat:            (body)            => http.post('/chat', body),
 }

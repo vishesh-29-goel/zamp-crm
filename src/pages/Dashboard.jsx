@@ -489,9 +489,7 @@ export default function Dashboard() {
     </div>
     </div>
 
-    <div className="w-80 flex-shrink-0 border-l border-gray-100 bg-white flex flex-col h-full">
-      <ChatPanel defaultPodId={activePodId} />
-    </div>
+    <ChatPanel />
 
     </div>
   )
