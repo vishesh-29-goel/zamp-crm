@@ -1,22 +1,34 @@
-import { useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useParams, Link, useSearchParams } from 'react-router-dom'
 import {
   ArrowLeft, Calendar, CheckCircle2, Clock, AlertTriangle, ChevronDown,
-  Users, Target, MessageSquare, TrendingUp, Zap, CheckCheck, AlertCircle,
-  CircleDot, FileText, Flag, Sparkles, Mail, Phone, Globe,
+  Users, Target, MessageSquare, TrendingUp, Zap, CheckCheck, AlertCircle, FileText, Flag, Sparkles, Mail, Phone, Globe,
   Building2, User, Star, ArrowRight, CornerDownRight, ExternalLink,
-  ChevronRight, Circle, Hash, Tag
+  ChevronRight, Circle, Hash, Tag, Layers, Plus, X, Send, Reply,
+  Smile, Trash2, ChevronLeft, Pencil
 } from 'lucide-react'
 import {
   useClient, useMilestones, useTasks, useAsks, useMeetings, useMeeting,
   useCommitments, useSignals, useStakeholders,
-  useUpdateTask, useUpdateAsk, useUpdateCommitment, useUpdateSignal
+  useUpdateTask, useUpdateAsk, useUpdateCommitment, useUpdateSignal,
+  useProcesses, useProcess, useAddUpdate, useAddActionItem, useToggleActionItem,
+  useAddBlocker, useResolveBlocker, useComments, useAddComment, useDeleteComment,
+  useAddReaction, useRemoveReaction, useZampians,
+  useCreateProcess, useUpdateProcess, useDeleteProcess
 } from '../lib/useApi'
+import { useAuth } from '../lib/auth'
+import {
+  updateUpdate, deleteUpdate,
+  updateActionItem, deleteActionItem,
+  updateBlocker, deleteBlocker,
+} from '../lib/api'
 import HealthBadge from '../components/HealthBadge'
 import StageBadge from '../components/StageBadge'
 import Spinner from '../components/Spinner'
 import ErrorMessage from '../components/ErrorMessage'
 import TaskDetailPanel from '../components/TaskDetailPanel'
+import ZampianCombobox from '../components/ZampianCombobox'
 
 /* ─── tiny helpers ──────────────────────────────────────────────── */
 const fmtDate  = d => d ? new Date(d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' }) : null
@@ -48,13 +60,11 @@ function StatusBadge({ status }) {
     done:'bg-emerald-50 text-emerald-700', completed:'bg-emerald-50 text-emerald-700',
     cancelled:'bg-gray-100 text-gray-400', pending:'bg-gray-100 text-gray-600',
     resolved:'bg-emerald-50 text-emerald-700', dismissed:'bg-gray-100 text-gray-400',
-    at_risk:'bg-red-50 text-red-600', fulfilled:'bg-emerald-50 text-emerald-700',
-  }
+    at_risk:'bg-red-50 text-red-600', fulfilled:'bg-emerald-50 text-emerald-700'}
   const label = {
     open:'Open', in_progress:'In Progress', done:'Done', completed:'Completed',
     cancelled:'Cancelled', pending:'Pending', resolved:'Resolved',
-    dismissed:'Dismissed', at_risk:'At Risk', fulfilled:'Fulfilled',
-  }
+    dismissed:'Dismissed', at_risk:'At Risk', fulfilled:'Fulfilled'}
   return (
     <span className={`inline-flex text-[11px] font-semibold px-2 py-0.5 rounded-full whitespace-nowrap ${map[status] || 'bg-gray-100 text-gray-500'}`}>
       {label[status] || status}
@@ -83,8 +93,7 @@ function Chip({ children, color='gray', size='sm' }) {
     gray:'bg-gray-100 text-gray-600', blue:'bg-blue-50 text-blue-700',
     purple:'bg-purple-50 text-purple-700', green:'bg-emerald-50 text-emerald-700',
     amber:'bg-amber-50 text-amber-700', red:'bg-red-50 text-red-700',
-    teal:'bg-teal-50 text-teal-700', orange:'bg-orange-50 text-orange-700',
-  }
+    teal:'bg-teal-50 text-teal-700', orange:'bg-orange-50 text-orange-700'}
   return (
     <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${cls[color]||cls.gray}`}>
       {children}
@@ -414,8 +423,7 @@ const PRIORITY_BADGE = {
   critical: 'bg-red-50 text-red-600 border border-red-200',
   high:     'bg-orange-50 text-orange-600 border border-orange-200',
   medium:   'bg-amber-50 text-amber-600 border border-amber-200',
-  low:      'bg-gray-100 text-gray-500',
-}
+  low:      'bg-gray-100 text-gray-500'}
 
 function TaskCard({ t, onOpen }) {
   const updateTask = useUpdateTask()
@@ -487,8 +495,7 @@ function TasksTab({ clientId }) {
     open:    items.filter(t => !['done','completed','cancelled'].includes(t.status)),
     done:    items.filter(t => ['done','completed'].includes(t.status)),
     blocker: items.filter(t => t.blocker_flag),
-    all:     items,
-  }
+    all:     items}
 
   return (
     <>
@@ -528,8 +535,7 @@ const SIGNAL_COLORS = {
   critical: { dot:'bg-red-500',    chip:'red',    label:'Critical' },
   high:     { dot:'bg-orange-400', chip:'orange', label:'High' },
   medium:   { dot:'bg-amber-400',  chip:'amber',  label:'Medium' },
-  low:      { dot:'bg-gray-300',   chip:'gray',   label:'Low' },
-}
+  low:      { dot:'bg-gray-300',   chip:'gray',   label:'Low' }}
 
 function SignalCard({ s, onDismiss }) {
   const [expanded, setExpanded] = useState(false)
@@ -633,8 +639,7 @@ const DIRECTION_META = {
   zamp_owes_client:    { label:'We Owe',      color:'red',    desc:'Zamp owes client' },
   client_owes_zamp:    { label:'They Owe',    color:'blue',   desc:'Client owes Zamp' },
   mutual:              { label:'Mutual',      color:'purple', desc:'Both sides' },
-  internal:            { label:'Internal',   color:'gray',   desc:'Internal only' },
-}
+  internal:            { label:'Internal',   color:'gray',   desc:'Internal only' }}
 
 function AskCard({ a, onUpdate }) {
   const [expanded, setExpanded] = useState(false)
@@ -1080,8 +1085,7 @@ const STRENGTH_META = {
   developing:  { color:'amber',  label:'Developing' },
   new:         { color:'blue',   label:'New' },
   weak:        { color:'red',    label:'Weak' },
-  champion:    { color:'purple', label:'Champion' },
-}
+  champion:    { color:'purple', label:'Champion' }}
 
 function StakeholdersTab({ clientId }) {
   const { data: stakeholders, isLoading, error } = useStakeholders(clientId)
@@ -1157,9 +1161,930 @@ function StakeholdersTab({ clientId }) {
   )
 }
 
+/* ─── COMMENTS THREAD ──────────────────────────────────────────── */
+const EMOJIS = ['👍', '❤️', '😂', '🎉', '😮', '😢']
+
+// Parse @mention tokens in text and render styled spans
+function CommentText({ text }) {
+  if (!text) return null
+  const parts = text.split(/(@\w[\w\s]*?\b)/)
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.startsWith('@') ? (
+          <span key={i} className="text-zamp-600 font-semibold bg-zamp-50 rounded px-1">{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  )
+}
+
+// @-mention autocomplete composer
+function CommentComposer({ processId, parentId = null, onCancel, autoFocus = false }) {
+  const [text, setText]         = useState('')
+  const [mentionQuery, setMentionQuery] = useState(null) // null = closed, string = query
+  const [mentionStart, setMentionStart] = useState(0)
+  const textareaRef             = useRef(null)
+  const addComment              = useAddComment(processId)
+  const { data: zampians = [] } = useZampians()
+
+  useEffect(() => {
+    if (autoFocus && textareaRef.current) textareaRef.current.focus()
+  }, [autoFocus])
+
+  const handleKeyUp = (e) => {
+    const val = e.target.value
+    const pos = e.target.selectionStart
+    // Find the last @ before cursor
+    const before = val.slice(0, pos)
+    const atIdx  = before.lastIndexOf('@')
+    if (atIdx !== -1 && !before.slice(atIdx + 1).includes(' ')) {
+      setMentionQuery(before.slice(atIdx + 1))
+      setMentionStart(atIdx)
+    } else {
+      setMentionQuery(null)
+    }
+  }
+
+  const insertMention = (name) => {
+    const before = text.slice(0, mentionStart)
+    const after  = text.slice(textareaRef.current.selectionStart)
+    setText(`${before}@${name} ${after}`)
+    setMentionQuery(null)
+    textareaRef.current.focus()
+  }
+
+  const filteredZampians = mentionQuery !== null
+    ? zampians.filter(z => z.name && z.name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 6)
+    : []
+
+  const handleSubmit = (e) => {
+    e.preventDefault()
+    if (!text.trim()) return
+    addComment.mutate(
+      { text: text.trim(), parent_id: parentId ?? null },
+      { onSuccess: () => { setText(''); if (onCancel) onCancel() } }
+    )
+  }
+
+  return (
+    <div className="relative">
+      <form onSubmit={handleSubmit} className="flex gap-2 items-end">
+        <textarea
+          ref={textareaRef}
+          value={text}
+          onChange={e => setText(e.target.value)}
+          onKeyUp={handleKeyUp}
+          placeholder={parentId ? 'Write a reply…' : 'Add a comment… (type @ to mention)'}
+          rows={2}
+          className="flex-1 px-3 py-2 text-[13px] border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-zamp-400/40 focus:border-zamp-400 placeholder:text-gray-300"
+        />
+        <div className="flex flex-col gap-1">
+          <button
+            type="submit"
+            disabled={!text.trim() || addComment.isPending}
+            className="p-2 rounded-lg bg-zamp-600 text-white hover:bg-zamp-700 disabled:opacity-40 transition-colors"
+          >
+            <Send size={13} />
+          </button>
+          {onCancel && (
+            <button type="button" onClick={onCancel}
+              className="p-2 rounded-lg border border-gray-200 text-gray-400 hover:text-gray-600 transition-colors">
+              <X size={13} />
+            </button>
+          )}
+        </div>
+      </form>
+      {mentionQuery !== null && filteredZampians.length > 0 && (
+        <div className="absolute bottom-full mb-1 left-0 bg-white border border-gray-200 rounded-xl shadow-lg z-20 overflow-hidden min-w-[180px]">
+          {filteredZampians.map(z => (
+            <button
+              key={z.id}
+              type="button"
+              onMouseDown={(e) => { e.preventDefault(); insertMention(z.name) }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-[13px] hover:bg-zamp-50 text-left"
+            >
+              <div className="w-5 h-5 rounded-full bg-zamp-100 text-zamp-700 text-[9px] font-bold flex items-center justify-center flex-shrink-0">
+                {(z.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()}
+              </div>
+              <span className="font-medium text-gray-700">{z.name}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CommentNode({ comment, allComments, processId, zampianId, highlightId }) {
+  const [replying, setReplying]   = useState(false)
+  const nodeRef                   = useRef(null)
+  const isHighlighted             = String(comment.id) === String(highlightId)
+  const isDeleted                 = !!comment.deleted_at || comment.is_deleted
+  const isOwner                   = comment.author_id === zampianId
+  const deleteComment             = useDeleteComment(processId)
+  const addReaction               = useAddReaction(processId)
+  const removeReaction            = useRemoveReaction(processId)
+  const replies                   = allComments.filter(c => String(c.parent_id) === String(comment.id))
+
+  // Scroll & highlight on mount if this is the deep-linked comment
+  const [highlighted, setHighlighted] = useState(isHighlighted)
+  useEffect(() => {
+    if (isHighlighted && nodeRef.current) {
+      nodeRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const timer = setTimeout(() => setHighlighted(false), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [isHighlighted])
+
+  const handleReact = (emoji) => {
+    const myReaction = (comment.reactions || []).find(r => r.emoji === emoji && r.zampian_id === zampianId)
+    if (myReaction) {
+      removeReaction.mutate({ commentId: comment.id, emoji })
+    } else {
+      addReaction.mutate({ commentId: comment.id, emoji })
+    }
+  }
+
+  const reactionMap = {}
+  for (const r of (comment.reactions || [])) {
+    reactionMap[r.emoji] = (reactionMap[r.emoji] || 0) + 1
+  }
+  const myReactions = new Set((comment.reactions || []).filter(r => r.zampian_id === zampianId).map(r => r.emoji))
+
+  return (
+    <div ref={nodeRef}
+      className={`transition-all duration-500 rounded-xl p-3 ${highlighted ? 'bg-zamp-50 ring-2 ring-zamp-300' : ''}`}>
+      <div className="flex gap-2.5">
+        <Avatar name={comment.author_name || '?'} size="sm" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-0.5">
+            <span className="text-[12px] font-semibold text-gray-700">{comment.author_name || 'Unknown'}</span>
+            <span className="text-[11px] text-gray-400">{fmtRel(comment.created_at)}</span>
+          </div>
+
+          {isDeleted ? (
+            <p className="text-[12px] text-gray-400 italic">This comment was deleted.</p>
+          ) : (
+            <>
+              <p className="text-[13px] text-gray-700 leading-relaxed">
+                <CommentText text={comment.text} />
+              </p>
+
+              {/* Emoji reactions */}
+              <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                {EMOJIS.map(emoji => {
+                  const count = reactionMap[emoji] || 0
+                  const isMine = myReactions.has(emoji)
+                  return (
+                    <button
+                      key={emoji}
+                      onClick={() => handleReact(emoji)}
+                      className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[11px] border transition-all ${
+                        isMine
+                          ? 'bg-zamp-50 border-zamp-300 text-zamp-700'
+                          : count > 0
+                            ? 'bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300'
+                            : 'bg-transparent border-transparent text-gray-300 hover:text-gray-500 hover:border-gray-200'
+                      }`}
+                    >
+                      <span>{emoji}</span>
+                      {count > 0 && <span className="font-medium">{count}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Actions: Reply + Delete */}
+              <div className="flex items-center gap-3 mt-1.5">
+                <button
+                  onClick={() => setReplying(r => !r)}
+                  className="flex items-center gap-1 text-[11px] text-gray-400 hover:text-zamp-600 transition-colors"
+                >
+                  <Reply size={11} />Reply
+                </button>
+                {isOwner && (
+                  <button
+                    onClick={() => deleteComment.mutate(comment.id)}
+                    className="flex items-center gap-1 text-[11px] text-gray-300 hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 size={11} />Delete
+                  </button>
+                )}
+              </div>
+
+              {replying && (
+                <div className="mt-2">
+                  <CommentComposer
+                    processId={processId}
+                    parentId={comment.id}
+                    onCancel={() => setReplying(false)}
+                    autoFocus
+                  />
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Replies — indented with left border */}
+      {replies.length > 0 && (
+        <div className="ml-8 mt-2 space-y-2 pl-3 border-l-2 border-gray-100">
+          {replies.map(r => (
+            <CommentNode
+              key={r.id}
+              comment={r}
+              allComments={allComments}
+              processId={processId}
+              zampianId={zampianId}
+              highlightId={highlightId}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function CommentsThread({ processId }) {
+  const { data: comments = [], isLoading } = useComments(processId)
+  const { user } = useAuth()
+  const [searchParams] = useSearchParams()
+  const highlightId = searchParams.get('commentId')
+  const zampianId = user?.zampian?.id
+
+  // Only top-level comments (parent_id === null or undefined)
+  const roots = (comments || []).filter(c => !c.parent_id)
+
+  return (
+    <div className="mt-6 border-t border-gray-100 pt-5">
+      <h3 className="text-[13px] font-semibold text-gray-600 mb-3 flex items-center gap-1.5">
+        <MessageSquare size={14} />
+        Comments {comments.length > 0 && <span className="text-gray-400 font-normal">({comments.length})</span>}
+      </h3>
+
+      {isLoading ? (
+        <div className="flex justify-center py-6"><Spinner /></div>
+      ) : (
+        <div className="space-y-3">
+          {roots.map(c => (
+            <CommentNode
+              key={c.id}
+              comment={c}
+              allComments={comments}
+              processId={processId}
+              zampianId={zampianId}
+              highlightId={highlightId}
+            />
+          ))}
+          {roots.length === 0 && (
+            <p className="text-[12px] text-gray-400 italic py-2">No comments yet. Be the first to comment.</p>
+          )}
+        </div>
+      )}
+
+      <div className="mt-4">
+        <CommentComposer processId={processId} />
+      </div>
+    </div>
+  )
+}
+
+/* ─── PROCESS DETAIL VIEW ───────────────────────────────────────── */
+function ProcessDetail({ clientId, processId, onBack, canEdit }) {
+  const { data: raw, isLoading, error } = useProcess(clientId, processId)
+  const addUpdate       = useAddUpdate(clientId, processId)
+  const addActionItem   = useAddActionItem(clientId, processId)
+  const toggleActionItem= useToggleActionItem(clientId, processId)
+  const addBlocker      = useAddBlocker(clientId, processId)
+  const resolveBlocker  = useResolveBlocker(clientId, processId)
+  const qc              = useQueryClient()
+
+  const [newUpdate, setNewUpdate]           = useState('')
+  const [newActionText, setNewActionText]   = useState('')
+  const [newActionDue, setNewActionDue]     = useState('')
+  const [newBlocker, setNewBlocker]         = useState('')
+  const [showAddUpdate, setShowAddUpdate]   = useState(false)
+  const [showAddAction, setShowAddAction]   = useState(false)
+  const [showAddBlocker, setShowAddBlocker] = useState(false)
+
+  // Issue 3: inline edit/delete state
+  const [editingUpdateId,     setEditingUpdateId]     = useState(null)
+  const [editingActionItemId, setEditingActionItemId] = useState(null)
+  const [editingBlockerId,    setEditingBlockerId]    = useState(null)
+  const [editUpdateContent,   setEditUpdateContent]   = useState('')
+  const [editActionDesc,      setEditActionDesc]      = useState('')
+  const [editActionDue,       setEditActionDue]       = useState('')
+  const [editBlockerContent,  setEditBlockerContent]  = useState('')
+
+  const qKey = ['process', clientId, processId]
+  const { mutate: mutateUpdateUpdate } = useMutation({
+    mutationFn: ({ updateId, data }) => updateUpdate(clientId, processId, updateId, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: qKey }); setEditingUpdateId(null) },
+  })
+  const { mutate: mutateDeleteUpdate } = useMutation({
+    mutationFn: (updateId) => deleteUpdate(clientId, processId, updateId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qKey }),
+  })
+  const { mutate: mutateUpdateActionItem } = useMutation({
+    mutationFn: ({ actionItemId, data }) => updateActionItem(clientId, processId, actionItemId, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: qKey }); setEditingActionItemId(null) },
+  })
+  const { mutate: mutateDeleteActionItem } = useMutation({
+    mutationFn: (actionItemId) => deleteActionItem(clientId, processId, actionItemId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qKey }),
+  })
+  const { mutate: mutateUpdateBlocker } = useMutation({
+    mutationFn: ({ blockerId, data }) => updateBlocker(clientId, processId, blockerId, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: qKey }); setEditingBlockerId(null) },
+  })
+  const { mutate: mutateDeleteBlocker } = useMutation({
+    mutationFn: (blockerId) => deleteBlocker(clientId, processId, blockerId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qKey }),
+  })
+
+  if (isLoading) return <div className="p-8 flex justify-center"><Spinner /></div>
+  if (error) return <div className="p-6"><ErrorMessage message={error} /></div>
+  if (!raw) return null
+
+  // Backend returns { process, updates, action_items, blockers }
+  const proc        = raw.process      || raw
+  const updates     = raw.updates      || proc.updates     || []
+  const actionItems = raw.action_items || proc.action_items || []
+  const blockers    = raw.blockers     || proc.blockers     || []
+  const activeBlockers   = blockers.filter(b => !b.resolved)
+  const resolvedBlockers = blockers.filter(b =>  b.resolved)
+
+  const handleAddUpdate = (e) => {
+    e.preventDefault()
+    if (!newUpdate.trim()) return
+    // Backend expects { content }
+    addUpdate.mutate({ content: newUpdate.trim() }, { onSuccess: () => { setNewUpdate(''); setShowAddUpdate(false) } })
+  }
+  const handleAddAction = (e) => {
+    e.preventDefault()
+    if (!newActionText.trim()) return
+    // Backend expects { description, due_date? }
+    addActionItem.mutate(
+      { description: newActionText.trim(), due_date: newActionDue || undefined },
+      { onSuccess: () => { setNewActionText(''); setNewActionDue(''); setShowAddAction(false) } }
+    )
+  }
+  const handleAddBlocker = (e) => {
+    e.preventDefault()
+    if (!newBlocker.trim()) return
+    // Backend expects { content }
+    addBlocker.mutate({ content: newBlocker.trim() }, { onSuccess: () => { setNewBlocker(''); setShowAddBlocker(false) } })
+  }
+
+  const isDoneAI = (a) => a.status === 'done' || a.done
+
+  return (
+    <div className="p-6 max-w-3xl">
+      {/* Back button */}
+      <button onClick={onBack}
+        className="flex items-center gap-1.5 text-[12px] text-gray-400 hover:text-zamp-600 mb-4 transition-colors">
+        <ChevronLeft size={14} />Back to Processes
+      </button>
+
+      <h2 className="text-[18px] font-bold text-gray-900 mb-1">{proc.name || proc.process_name}</h2>
+      {proc.poc_name && proc.poc_name !== 'Unassigned' && (
+        <p className="text-[12px] text-gray-500 mb-5 flex items-center gap-1"><User size={11}/>POC: {proc.poc_name}</p>
+      )}
+
+      {/* ── Updates ── */}
+      <section className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[13px] font-semibold text-gray-700 uppercase tracking-wider">
+            Updates {updates.length > 0 && <span className="text-gray-400 font-normal text-[12px]">({updates.length})</span>}
+          </h3>
+          {canEdit && (
+            <button onClick={() => setShowAddUpdate(v => !v)}
+              className="flex items-center gap-1 text-[11px] text-zamp-600 hover:text-zamp-800 transition-colors">
+              <Plus size={12} />Post update
+            </button>
+          )}
+        </div>
+        {canEdit && showAddUpdate && (
+          <form onSubmit={handleAddUpdate} className="mb-3 space-y-2">
+            <textarea
+              autoFocus
+              rows={3}
+              value={newUpdate}
+              onChange={e => setNewUpdate(e.target.value)}
+              placeholder="What's the latest update on this process?"
+              className="w-full px-3 py-2 text-[13px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zamp-400/40 focus:border-zamp-400 resize-none placeholder:text-gray-300"
+            />
+            <div className="flex gap-2">
+              <button type="submit" disabled={!newUpdate.trim() || addUpdate.isPending}
+                className="px-3 py-1.5 text-[12px] bg-zamp-600 text-white rounded-lg hover:bg-zamp-700 disabled:opacity-50 transition-colors">
+                Post update
+              </button>
+              <button type="button" onClick={() => { setShowAddUpdate(false); setNewUpdate('') }}
+                className="px-3 py-1.5 text-[12px] border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+        {updates.length === 0 && !showAddUpdate
+          ? <p className="text-[12px] text-gray-400 italic">No updates yet.</p>
+          : updates.map(u => (
+            <div key={u.id} className="flex gap-2.5 py-2.5 border-b border-gray-50 last:border-0 group">
+              <Avatar name={u.author_name || '?'} size="sm" />
+              <div className="flex-1 min-w-0">
+                {editingUpdateId === u.id ? (
+                  <form onSubmit={e => { e.preventDefault(); mutateUpdateUpdate({ updateId: u.id, data: { content: editUpdateContent } }) }} className="space-y-1">
+                    <textarea rows={2} autoFocus value={editUpdateContent} onChange={e => setEditUpdateContent(e.target.value)}
+                      className="w-full px-2 py-1 text-[13px] border border-zamp-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-zamp-400/40 resize-none" />
+                    <div className="flex gap-1.5">
+                      <button type="submit" className="px-2 py-1 text-[11px] bg-zamp-600 text-white rounded-md hover:bg-zamp-700">Save</button>
+                      <button type="button" onClick={() => setEditingUpdateId(null)} className="px-2 py-1 text-[11px] border border-gray-200 text-gray-500 rounded-md hover:bg-gray-50">Cancel</button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <p className="text-[13px] text-gray-700 leading-relaxed">{u.content || u.text}</p>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{fmtRel(u.created_at)}{u.author_name && ` · ${u.author_name}`}</p>
+                  </>
+                )}
+              </div>
+              {canEdit && editingUpdateId !== u.id && (
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                  <button onClick={() => { setEditingUpdateId(u.id); setEditUpdateContent(u.content || u.text || '') }}
+                    className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-zamp-600 hover:bg-gray-100 transition-colors">
+                    <Pencil size={10} />
+                  </button>
+                  <button onClick={() => mutateDeleteUpdate(u.id)}
+                    className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        }
+      </section>
+
+      {/* ── Action Items ── */}
+      <section className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[13px] font-semibold text-gray-700 uppercase tracking-wider">
+            Action Items {actionItems.length > 0 && <span className="text-gray-400 font-normal text-[12px]">({actionItems.length})</span>}
+          </h3>
+          {canEdit && (
+            <button onClick={() => setShowAddAction(v => !v)}
+              className="flex items-center gap-1 text-[11px] text-zamp-600 hover:text-zamp-800 transition-colors">
+              <Plus size={12} />Add action item
+            </button>
+          )}
+        </div>
+        {canEdit && showAddAction && (
+          <form onSubmit={handleAddAction} className="mb-3 space-y-2">
+            <input
+              autoFocus
+              value={newActionText}
+              onChange={e => setNewActionText(e.target.value)}
+              placeholder="Describe the action item…"
+              className="w-full px-3 py-2 text-[13px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zamp-400/40 focus:border-zamp-400 placeholder:text-gray-300"
+            />
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={newActionDue}
+                onChange={e => setNewActionDue(e.target.value)}
+                className="px-3 py-1.5 text-[12px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zamp-400/40 focus:border-zamp-400 text-gray-600"
+              />
+              <button type="submit" disabled={!newActionText.trim() || addActionItem.isPending}
+                className="px-3 py-1.5 text-[12px] bg-zamp-600 text-white rounded-lg hover:bg-zamp-700 disabled:opacity-50 transition-colors">
+                Add
+              </button>
+              <button type="button" onClick={() => { setShowAddAction(false); setNewActionText(''); setNewActionDue('') }}
+                className="px-3 py-1.5 text-[12px] border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+        {actionItems.length === 0 && !showAddAction
+          ? <p className="text-[12px] text-gray-400 italic">No action items.</p>
+          : actionItems.map(a => (
+            <div key={a.id} className="flex items-start gap-2.5 py-2 border-b border-gray-50 last:border-0 group">
+              <button
+                onClick={() => canEdit && toggleActionItem.mutate({ id: a.id, currentDone: isDoneAI(a) })}
+                disabled={!canEdit}
+                className={`mt-0.5 w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center transition-colors ${
+                  isDoneAI(a) ? 'bg-emerald-500 border-emerald-500' : canEdit ? 'border-gray-300 hover:border-zamp-400' : 'border-gray-200'
+                }`}
+              >
+                {isDoneAI(a) && <CheckCheck size={9} className="text-white" />}
+              </button>
+              <div className="flex-1 min-w-0">
+                {editingActionItemId === a.id ? (
+                  <form onSubmit={e => { e.preventDefault(); mutateUpdateActionItem({ actionItemId: a.id, data: { description: editActionDesc, due_date: editActionDue || undefined } }) }} className="space-y-1">
+                    <input autoFocus value={editActionDesc} onChange={e => setEditActionDesc(e.target.value)}
+                      className="w-full px-2 py-1 text-[13px] border border-zamp-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-zamp-400/40" />
+                    <div className="flex items-center gap-1.5">
+                      <input type="date" value={editActionDue} onChange={e => setEditActionDue(e.target.value)}
+                        className="px-2 py-1 text-[12px] border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-zamp-400/40 text-gray-600" />
+                      <button type="submit" className="px-2 py-1 text-[11px] bg-zamp-600 text-white rounded-md hover:bg-zamp-700">Save</button>
+                      <button type="button" onClick={() => setEditingActionItemId(null)} className="px-2 py-1 text-[11px] border border-gray-200 text-gray-500 rounded-md hover:bg-gray-50">Cancel</button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <p className={`text-[13px] leading-relaxed ${isDoneAI(a) ? 'text-gray-400 line-through' : 'text-gray-700'}`}>
+                      {a.description || a.title || a.text}
+                    </p>
+                    {a.due_date && (
+                      <p className={`text-[11px] mt-0.5 flex items-center gap-1 ${a.is_overdue ? 'text-red-500 font-semibold' : 'text-gray-400'}`}>
+                        <Calendar size={10}/>{fmtDate(a.due_date)}{a.is_overdue && ' (overdue)'}
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+              {canEdit && editingActionItemId !== a.id && (
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 mt-0.5">
+                  <button onClick={() => { setEditingActionItemId(a.id); setEditActionDesc(a.description || a.title || ''); setEditActionDue(a.due_date ? a.due_date.slice(0,10) : '') }}
+                    className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-zamp-600 hover:bg-gray-100 transition-colors">
+                    <Pencil size={10} />
+                  </button>
+                  <button onClick={() => mutateDeleteActionItem(a.id)}
+                    className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        }
+      </section>
+
+      {/* ── Blockers ── */}
+      <section className="mb-6">
+        <div className="flex items-center justify-between mb-2">
+          <h3 className="text-[13px] font-semibold text-gray-700 uppercase tracking-wider">
+            Blockers {activeBlockers.length > 0 && <span className="text-red-400 font-normal text-[12px]">({activeBlockers.length} active)</span>}
+          </h3>
+          {canEdit && (
+            <button onClick={() => setShowAddBlocker(v => !v)}
+              className="flex items-center gap-1 text-[11px] text-zamp-600 hover:text-zamp-800 transition-colors">
+              <Plus size={12} />Add blocker
+            </button>
+          )}
+        </div>
+        {canEdit && showAddBlocker && (
+          <form onSubmit={handleAddBlocker} className="flex gap-2 mb-3">
+            <input
+              autoFocus
+              value={newBlocker}
+              onChange={e => setNewBlocker(e.target.value)}
+              placeholder="Describe the blocker…"
+              className="flex-1 px-3 py-2 text-[13px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zamp-400/40 focus:border-zamp-400 placeholder:text-gray-300"
+            />
+            <button type="submit" disabled={!newBlocker.trim() || addBlocker.isPending}
+              className="px-3 py-1.5 text-[12px] bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50 transition-colors">
+              Add blocker
+            </button>
+            <button type="button" onClick={() => { setShowAddBlocker(false); setNewBlocker('') }}
+              className="px-3 py-1.5 text-[12px] border border-gray-200 text-gray-500 rounded-lg hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+          </form>
+        )}
+        {activeBlockers.length === 0 && !showAddBlocker
+          ? <p className="text-[12px] text-gray-400 italic">No active blockers.</p>
+          : activeBlockers.map(b => (
+            <div key={b.id} className="flex items-start gap-2.5 py-2.5 border border-red-100 rounded-xl px-3 mb-2 bg-red-50 group">
+              <Flag size={13} className="text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                {editingBlockerId === b.id ? (
+                  <form onSubmit={e => { e.preventDefault(); mutateUpdateBlocker({ blockerId: b.id, data: { content: editBlockerContent } }) }} className="space-y-1">
+                    <textarea rows={2} autoFocus value={editBlockerContent} onChange={e => setEditBlockerContent(e.target.value)}
+                      className="w-full px-2 py-1 text-[13px] border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400/40 resize-none bg-white" />
+                    <div className="flex gap-1.5">
+                      <button type="submit" className="px-2 py-1 text-[11px] bg-zamp-600 text-white rounded-md hover:bg-zamp-700">Save</button>
+                      <button type="button" onClick={() => setEditingBlockerId(null)} className="px-2 py-1 text-[11px] border border-gray-200 text-gray-500 rounded-md hover:bg-gray-50">Cancel</button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <p className="text-[13px] text-gray-800">{b.content || b.description || b.text}</p>
+                    {b.created_at && <p className="text-[11px] text-gray-400 mt-0.5">{fmtRel(b.created_at)}{b.author_name && ` · ${b.author_name}`}</p>}
+                  </>
+                )}
+              </div>
+              {canEdit && editingBlockerId !== b.id && (
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => resolveBlocker.mutate(b.id)}
+                    disabled={resolveBlocker.isPending}
+                    className="text-[11px] font-medium text-emerald-600 hover:text-emerald-700 px-2 py-1 rounded hover:bg-emerald-50 disabled:opacity-50 transition-colors"
+                  >
+                    Resolve
+                  </button>
+                  <button onClick={() => { setEditingBlockerId(b.id); setEditBlockerContent(b.content || b.description || '') }}
+                    className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-zamp-600 hover:bg-red-100 transition-colors opacity-0 group-hover:opacity-100">
+                    <Pencil size={10} />
+                  </button>
+                  <button onClick={() => mutateDeleteBlocker(b.id)}
+                    className="w-5 h-5 rounded flex items-center justify-center text-gray-400 hover:text-red-600 hover:bg-red-100 transition-colors opacity-0 group-hover:opacity-100">
+                    <Trash2 size={10} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))
+        }
+        {resolvedBlockers.length > 0 && (
+          <p className="text-[11px] text-gray-400 mt-1">{resolvedBlockers.length} resolved blocker{resolvedBlockers.length !== 1 ? 's' : ''}</p>
+        )}
+      </section>
+
+      {/* ── Comments Thread ── */}
+      <CommentsThread processId={processId} />
+    </div>
+  )
+}
+
+/* ─── PROCESS FORM MODAL ─────────────────────────────────────────── */
+function ProcessFormModal({ clientId, process = null, onClose }) {
+  const [name, setName]             = useState(process?.name || process?.process_name || '')
+  const [pocZampian, setPocZampian] = useState(null)
+  const createProcess = useCreateProcess(clientId)
+  const updateProcess = useUpdateProcess(clientId)
+
+  // Pre-populate poc from existing process
+  const { data: allZampians = [] } = useZampians()
+  useEffect(() => {
+    if (process?.poc_id && allZampians.length) {
+      setPocZampian(allZampians.find(z => z.id === process.poc_id) || null)
+    }
+  }, [process?.poc_id, allZampians])
+
+  const isPending = createProcess.isPending || updateProcess.isPending
+
+  function handleSubmit(e) {
+    e.preventDefault()
+    if (!name.trim()) return
+    const body = { name: name.trim(), poc_id: pocZampian?.id || null }
+    if (process) {
+      updateProcess.mutate({ processId: process.id, ...body }, { onSuccess: onClose })
+    } else {
+      createProcess.mutate(body, { onSuccess: onClose })
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+          <h2 className="text-[15px] font-semibold text-gray-900 flex items-center gap-2">
+            <Layers size={15} className="text-zamp-600" />
+            {process ? 'Edit Process' : 'New Process'}
+          </h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
+            <X size={14} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">Process Name <span className="text-red-400">*</span></label>
+            <input
+              autoFocus
+              type="text"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              placeholder="e.g. Invoice Processing, Vendor Onboarding…"
+              required
+              className="w-full px-3 py-2 text-[13px] border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-zamp-400/40 focus:border-zamp-400 placeholder:text-gray-300"
+            />
+          </div>
+
+          <div>
+            <label className="block text-[12px] font-semibold text-gray-600 mb-1.5">
+              POC <span className="text-gray-400 font-normal">(optional)</span>
+            </label>
+            <ZampianCombobox
+              value={pocZampian?.id || null}
+              onChange={setPocZampian}
+              placeholder="Search zampian name or email…"
+            />
+            {pocZampian && (
+              <p className="text-[11px] text-gray-400 mt-1 flex items-center gap-1">
+                <User size={10} /> {pocZampian.name}
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={!name.trim() || isPending}
+              className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-zamp-600 text-white hover:bg-zamp-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              {isPending
+                ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : null}
+              {process ? 'Save Changes' : 'Create Process'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+/* ─── PROCESSES TAB ─────────────────────────────────────────────── */
+function ProcessesTab({ clientId, client }) {
+  const { data: processes, isLoading, error } = useProcesses(clientId)
+  const deleteProcess = useDeleteProcess(clientId)
+  const { user } = useAuth()
+
+  const [selectedProcess, setSelectedProcess] = useState(null)
+  const [showForm, setShowForm]               = useState(false)
+  const [editingProcess, setEditingProcess]   = useState(null)  // null = create, object = edit
+  const [confirmDelete, setConfirmDelete]     = useState(null)  // process object to delete
+
+  // canEdit: SUPERADMIN or pod member of the client's pod
+  const canEdit = user?.role === 'SUPERADMIN' || user?.zampian?.pod_id === client?.pod_id
+
+  if (isLoading) return <div className="p-8 flex justify-center"><Spinner /></div>
+  if (error) return <div className="p-6"><ErrorMessage message={error} /></div>
+
+  if (selectedProcess) {
+    return (
+      <>
+        <ProcessDetail
+          clientId={clientId}
+          processId={selectedProcess}
+          onBack={() => setSelectedProcess(null)}
+          canEdit={canEdit}
+        />
+        {/* Modals can still open from within detail but we handle them here */}
+      </>
+    )
+  }
+
+  const items = processes || []
+
+  function handleDeleteConfirm() {
+    if (!confirmDelete) return
+    deleteProcess.mutate(confirmDelete.id, { onSuccess: () => setConfirmDelete(null) })
+  }
+
+  return (
+    <div className="p-6">
+      {/* New Process button — only for pod members */}
+      {canEdit && (
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={() => { setEditingProcess(null); setShowForm(true) }}
+            className="flex items-center gap-1.5 px-4 py-2 text-[13px] font-medium bg-zamp-600 text-white rounded-xl hover:bg-zamp-700 transition-colors"
+          >
+            <Plus size={14} />New Process
+          </button>
+        </div>
+      )}
+
+      {items.length === 0 && !canEdit ? (
+        <Empty title="No processes" sub="Processes for this client will appear here" />
+      ) : items.length === 0 && canEdit ? (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {/* New Process card when list is empty */}
+          <button
+            onClick={() => { setEditingProcess(null); setShowForm(true) }}
+            className="text-left bg-white border-2 border-dashed border-gray-200 rounded-xl p-4 hover:border-zamp-300 hover:bg-zamp-50/30 transition-all group flex items-center justify-center gap-2 h-24"
+          >
+            <Plus size={16} className="text-gray-300 group-hover:text-zamp-500 transition-colors" />
+            <span className="text-[13px] text-gray-400 group-hover:text-zamp-600 font-medium transition-colors">Add first process</span>
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {items.map(p => (
+            <div key={p.id} className="relative group">
+              <button
+                onClick={() => setSelectedProcess(p.id)}
+                className="w-full text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-zamp-300 hover:shadow-sm transition-all"
+              >
+                <div className="flex items-start gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-zamp-50 flex items-center justify-center flex-shrink-0 group-hover:bg-zamp-100 transition-colors">
+                    <Layers size={14} className="text-zamp-600" />
+                  </div>
+                  <div className="min-w-0 flex-1 pr-6">
+                    <p className="text-[14px] font-semibold text-gray-800 leading-snug group-hover:text-zamp-700 transition-colors">
+                      {p.name || p.process_name}
+                    </p>
+                    {p.poc_name && p.poc_name !== 'Unassigned' && (
+                      <p className="text-[11px] text-gray-400 mt-0.5 flex items-center gap-1">
+                        <User size={10} />{p.poc_name}
+                      </p>
+                    )}
+                    {(p.open_action_item_count > 0 || p.open_blocker_count > 0) && (
+                      <div className="flex items-center gap-2 mt-1.5">
+                        {p.open_action_item_count > 0 && (
+                          <span className="text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded-full">
+                            {p.open_action_item_count} action{p.open_action_item_count !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {p.open_blocker_count > 0 && (
+                          <span className="text-[10px] font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full">
+                            {p.open_blocker_count} blocker{p.open_blocker_count !== 1 ? 's' : ''}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </button>
+
+              {/* Edit / Delete icons — only for pod members, shown on hover */}
+              {canEdit && (
+                <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button
+                    onClick={e => { e.stopPropagation(); setEditingProcess(p); setShowForm(true) }}
+                    title="Edit process"
+                    className="w-6 h-6 rounded-md bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-zamp-600 hover:border-zamp-300 transition-colors shadow-sm"
+                  >
+                    <Pencil size={11} />
+                  </button>
+                  <button
+                    onClick={e => { e.stopPropagation(); setConfirmDelete(p) }}
+                    title="Delete process"
+                    className="w-6 h-6 rounded-md bg-white border border-gray-200 flex items-center justify-center text-gray-400 hover:text-red-500 hover:border-red-200 transition-colors shadow-sm"
+                  >
+                    <Trash2 size={11} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* + New Process card at end of grid */}
+          {canEdit && (
+            <button
+              onClick={() => { setEditingProcess(null); setShowForm(true) }}
+              className="text-left bg-white border-2 border-dashed border-gray-200 rounded-xl p-4 hover:border-zamp-300 hover:bg-zamp-50/30 transition-all group flex items-center justify-center gap-2 min-h-[88px]"
+            >
+              <Plus size={15} className="text-gray-300 group-hover:text-zamp-500 transition-colors" />
+              <span className="text-[13px] text-gray-400 group-hover:text-zamp-600 font-medium transition-colors">New Process</span>
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Create / Edit modal */}
+      {showForm && (
+        <ProcessFormModal
+          clientId={clientId}
+          process={editingProcess}
+          onClose={() => { setShowForm(false); setEditingProcess(null) }}
+        />
+      )}
+
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 p-6">
+            <h3 className="text-[15px] font-semibold text-gray-900 mb-2">Delete process?</h3>
+            <p className="text-[13px] text-gray-500 mb-5">
+              <span className="font-semibold text-gray-700">"{confirmDelete.name || confirmDelete.process_name}"</span> and all its updates, action items, and blockers will be permanently deleted. This cannot be undone.
+            </p>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-medium border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors">
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={deleteProcess.isPending}
+                className="flex-1 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {deleteProcess.isPending
+                  ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                  : <Trash2 size={13} />}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ─── MAIN PAGE ─────────────────────────────────────────────────── */
 export default function ClientDetail() {
   const { id: clientId } = useParams()
+  const { user } = useAuth()
   const [tab, setTab] = useState('overview')
 
   const { data: client, isLoading, error } = useClient(clientId)
@@ -1193,7 +2118,7 @@ export default function ClientDetail() {
   const openSignals = (signals||[]).filter(s=>s.status!=='dismissed')
 
   const TABS = [
-    { key:'overview',     label:'Overview',     icon: CircleDot,      count:0 },
+    { key:'overview',     label:'Overview',     icon: Circle,         count:0 },
     { key:'milestones',   label:'Milestones',   icon: Target,         count: (milestones||[]).filter(m=>!m.completed_at).length },
     { key:'tasks',        label:'Tasks',        icon: CheckCircle2,   count: (tasks||[]).filter(t=>!['done','completed','cancelled'].includes(t.status)).length },
     { key:'asks',         label:'Asks',         icon: MessageSquare,  count: (asks||[]).filter(a=>a.status==='open').length },
@@ -1201,6 +2126,7 @@ export default function ClientDetail() {
     { key:'signals',      label:'Signals',      icon: Zap,            count: openSignals.length },
     { key:'meetings',     label:'Meetings',     icon: Calendar,       count: (meetings||[]).length },
     { key:'stakeholders', label:'Stakeholders', icon: Users,          count: (stakeholders||[]).length },
+    { key:'processes',    label:'Processes',    icon: Layers,         count: 0 },
   ]
 
   return (
@@ -1217,6 +2143,7 @@ export default function ClientDetail() {
         {tab === 'signals'      && <SignalsTab        clientId={clientId}/>}
         {tab === 'meetings'     && <MeetingsTab       clientId={clientId}/>}
         {tab === 'stakeholders' && <StakeholdersTab   clientId={clientId}/>}
+        {tab === 'processes'    && <ProcessesTab      clientId={clientId} client={client}/>}
       </div>
     </div>
   )

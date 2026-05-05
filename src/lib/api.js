@@ -115,4 +115,57 @@ export const api = {
 
   // Ask Pace — LLM-backed chat over pod-scoped CRM data
   chat:            (body)            => http.post('/chat', body),
+
+  // POCs
+  addPoc:    (clientId, email)       => http.post(`/clients/${clientId}/pocs`, { email }),
+  removePoc: (clientId, zampianId)   => http.delete(`/clients/${clientId}/pocs/${zampianId}`),
+
+  // Processes
+  processes:       (clientId)             => http.get(`/clients/${clientId}/processes`),
+  process:         (clientId, processId)  => http.get(`/clients/${clientId}/processes/${processId}`),
+  createProcess:   (clientId, body)       => http.post(`/clients/${clientId}/processes`, body),
+  updateProcess:   (clientId, processId, body) => http.patch(`/clients/${clientId}/processes/${processId}`, body),
+  deleteProcess:   (clientId, processId)  => http.delete(`/clients/${clientId}/processes/${processId}`),
+
+  // Process sub-resources
+  addUpdate:    (clientId, processId, body)  => http.post(`/clients/${clientId}/processes/${processId}/updates`, body),
+  addActionItem:(clientId, processId, body)  => http.post(`/clients/${clientId}/processes/${processId}/action-items`, body),
+  toggleActionItem:(clientId, processId, id, newStatus) => http.patch(`/clients/${clientId}/processes/${processId}/action_items/${id}`, { status: newStatus }),
+  addBlocker:   (clientId, processId, body)  => http.post(`/clients/${clientId}/processes/${processId}/blockers`, body),
+  resolveBlocker:(clientId, processId, id)   => http.post(`/clients/${clientId}/processes/${processId}/blockers/${id}/resolve`),
+
+  // Comments
+  comments:        (processId)                    => http.get(`/processes/${processId}/comments`),
+  addComment:      (processId, body)              => http.post(`/processes/${processId}/comments`, body),
+  deleteComment:   (processId, commentId)         => http.delete(`/processes/${processId}/comments/${commentId}`),
+  addReaction:     (processId, commentId, emoji)  => http.post(`/processes/${processId}/comments/${commentId}/reactions`, { emoji }),
+  removeReaction:  (processId, commentId, emoji)  => http.delete(`/processes/${processId}/comments/${commentId}/reactions/${emoji}`),
+
+  // Outreach module (Pod 4 + SUPERADMIN + CEO only)
+  outreachWorkstreams: ()                  => http.get('/outreach/workstreams'),
+  outreachJobs:        ()                  => http.get('/outreach/jobs'),
+  outreachJob:         (jobId)             => http.get(`/outreach/jobs/${jobId}`),
+  createOutreachJob:   (body)              => http.post('/outreach/jobs', body),
+  editOutreachCsv:     (jobId, csv_data)   => http.patch(`/outreach/jobs/${jobId}/csv`, { csv_data }),
+  deployOutreachJob:   (jobId, body)       => http.post(`/outreach/jobs/${jobId}/deploy`, body),
+  cancelOutreachJob:   (jobId)             => http.post(`/outreach/jobs/${jobId}/cancel`),
 }
+
+// Issue 3: Edit/delete methods for updates, action items, blockers
+export const updateUpdate = (clientId, processId, updateId, data) =>
+  api.patch(`/clients/${clientId}/processes/${processId}/updates/${updateId}`, data)
+
+export const deleteUpdate = (clientId, processId, updateId) =>
+  api.delete(`/clients/${clientId}/processes/${processId}/updates/${updateId}`)
+
+export const updateActionItem = (clientId, processId, actionItemId, data) =>
+  api.patch(`/clients/${clientId}/processes/${processId}/action_items/${actionItemId}`, data)
+
+export const deleteActionItem = (clientId, processId, actionItemId) =>
+  api.delete(`/clients/${clientId}/processes/${processId}/action_items/${actionItemId}`)
+
+export const updateBlocker = (clientId, processId, blockerId, data) =>
+  api.patch(`/clients/${clientId}/processes/${processId}/blockers/${blockerId}`, data)
+
+export const deleteBlocker = (clientId, processId, blockerId) =>
+  api.delete(`/clients/${clientId}/processes/${processId}/blockers/${blockerId}`)
