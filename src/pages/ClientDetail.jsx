@@ -25,6 +25,8 @@ import {
 } from '../lib/api'
 import HealthBadge from '../components/HealthBadge'
 import StageBadge from '../components/StageBadge'
+import PriorityBadge from '../components/PriorityBadge'
+import { InlinePriority, InlineHealth, InlineStage } from '../components/InlineClientEditors'
 import Spinner from '../components/Spinner'
 import ErrorMessage from '../components/ErrorMessage'
 import TaskDetailPanel from '../components/TaskDetailPanel'
@@ -183,7 +185,7 @@ function FilterBar({ opts, active, onChange }) {
 }
 
 /* ─── CLIENT HEADER ─────────────────────────────────────────────── */
-function ClientHeader({ client }) {
+function ClientHeader({ client, canEdit }) {
   const init = (client.name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase()
   return (
     <div className="bg-white border-b border-gray-200">
@@ -199,11 +201,13 @@ function ClientHeader({ client }) {
             <div>
               <h1 className="text-[22px] font-bold text-gray-900 leading-tight">{client.name}</h1>
               <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                <StageBadge stage={client.stage} />
-                <HealthBadge health={client.health} />
+                <InlineStage client={client} canEdit={canEdit} />
+                <InlineHealth client={client} canEdit={canEdit} />
+                <InlinePriority client={client} canEdit={canEdit} />
                 {client.pod_name && <span className="text-[12px] text-gray-400 font-medium">{client.pod_name}</span>}
                 {client.arr != null && <span className="text-[13px] font-bold text-gray-700">{fmtMoney(client.arr)}<span className="text-[11px] font-normal text-gray-400 ml-0.5">ARR</span></span>}
               </div>
+              {canEdit && <p className="text-[11px] text-gray-400 mt-1.5">Click Stage, Health or Priority to edit</p>}
             </div>
           </div>
           <div className="text-right flex-shrink-0 pt-1">
@@ -2088,7 +2092,7 @@ function ProcessesTab({ clientId, client }) {
 /* ─── MAIN PAGE ─────────────────────────────────────────────────── */
 export default function ClientDetail() {
   const { id: clientId } = useParams()
-  const { user } = useAuth()
+  const { user, role } = useAuth()
   const [tab, setTab] = useState('overview')
 
   const { data: client, isLoading, error } = useClient(clientId)
@@ -2135,7 +2139,10 @@ export default function ClientDetail() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <ClientHeader client={client} />
+      <ClientHeader client={client} canEdit={
+        role === 'SUPERADMIN' ||
+        ((role === 'GM' || role === 'ASM') && Number(user?.zampian?.pod_id) === Number(client?.pod_id))
+      } />
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       <div className="max-w-5xl mx-auto">

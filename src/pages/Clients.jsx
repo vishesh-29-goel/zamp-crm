@@ -1,103 +1,15 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { Search, SlidersHorizontal, X, ArrowRightLeft, Lock, Plus } from 'lucide-react'
-import { useClients, usePods, useCreatePodTransfer, useAddPoc, useRemovePoc, useZampians, useCreateClient, useUpdateClient } from '../lib/useApi'
+import { useClients, usePods, useCreatePodTransfer, useAddPoc, useRemovePoc, useZampians, useCreateClient } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 import HealthBadge from '../components/HealthBadge'
 import StageBadge from '../components/StageBadge'
 import PriorityBadge from '../components/PriorityBadge'
+import { InlinePriority, InlineHealth } from '../components/InlineClientEditors'
 import Spinner from '../components/Spinner'
 
 const C2C_POD_ID = 4
-
-// ─── Inline Priority Editor ───────────────────────────────────────────────────
-function InlinePriority({ client, canEdit }) {
-  const [open, setOpen] = useState(false)
-  const updateClient = useUpdateClient()
-  const ref = useRef(null)
-  const current = (client.tags || []).find(t => t === 'P0' || t === 'P1') || null
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  if (!canEdit) return <PriorityBadge tags={client.tags} />
-
-  async function setPriority(p) {
-    const otherTags = (client.tags || []).filter(t => t !== 'P0' && t !== 'P1')
-    const newTags = p ? [...otherTags, p] : otherTags
-    await updateClient.mutateAsync({ id: client.id, tags: newTags })
-    setOpen(false)
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      <button onClick={e => { e.preventDefault(); setOpen(o => !o) }} className="cursor-pointer">
-        <PriorityBadge tags={client.tags} />
-      </button>
-      {open && (
-        <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-border rounded-xl shadow-lg py-1 min-w-[90px]">
-          {['P0', 'P1'].map(p => (
-            <button key={p} onClick={() => setPriority(p)}
-              className={`w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-zamp-50 transition-colors ${current === p ? 'text-zamp-600' : 'text-gray-700'}`}>
-              {p} {current === p && '✓'}
-            </button>
-          ))}
-          {current && (
-            <button onClick={() => setPriority(null)}
-              className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 transition-colors border-t border-border mt-1">
-              Clear
-            </button>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Inline Health Editor ─────────────────────────────────────────────────────
-function InlineHealth({ client, canEdit }) {
-  const [open, setOpen] = useState(false)
-  const updateClient = useUpdateClient()
-  const ref = useRef(null)
-
-  useEffect(() => {
-    if (!open) return
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
-  if (!canEdit) return <HealthBadge health={client.health} />
-
-  const HEALTH_LABELS = { green: '🟢 Green', yellow: '🟡 Yellow', red: '🔴 Red' }
-
-  async function setHealth(h) {
-    await updateClient.mutateAsync({ id: client.id, health: h })
-    setOpen(false)
-  }
-
-  return (
-    <div ref={ref} className="relative">
-      <button onClick={e => { e.preventDefault(); setOpen(o => !o) }} className="cursor-pointer">
-        <HealthBadge health={client.health} />
-      </button>
-      {open && (
-        <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-border rounded-xl shadow-lg py-1 min-w-[110px]">
-          {['green', 'yellow', 'red'].map(h => (
-            <button key={h} onClick={() => setHealth(h)}
-              className={`w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-zamp-50 transition-colors ${client.health === h ? 'text-zamp-600' : 'text-gray-700'}`}>
-              {HEALTH_LABELS[h]} {client.health === h && '✓'}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ─── Add Client Modal ─────────────────────────────────────────────────────────
 function AddClientModal({ pods, onClose }) {
