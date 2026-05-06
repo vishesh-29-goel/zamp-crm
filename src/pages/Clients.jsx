@@ -1,13 +1,258 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { Search, SlidersHorizontal, X, ArrowRightLeft } from 'lucide-react'
-import { useClients, usePods, useCreatePodTransfer } from '../lib/useApi'
+import { Search, SlidersHorizontal, X, ArrowRightLeft, Lock, Plus } from 'lucide-react'
+import { useClients, usePods, useCreatePodTransfer, useAddPoc, useRemovePoc, useZampians, useCreateClient, useUpdateClient } from '../lib/useApi'
 import { useAuth } from '../lib/auth'
 import HealthBadge from '../components/HealthBadge'
 import StageBadge from '../components/StageBadge'
+import PriorityBadge from '../components/PriorityBadge'
 import Spinner from '../components/Spinner'
 
 const C2C_POD_ID = 4
+
+// ─── Inline Priority Editor ───────────────────────────────────────────────────
+function InlinePriority({ client, canEdit }) {
+  const [open, setOpen] = useState(false)
+  const updateClient = useUpdateClient()
+  const ref = useRef(null)
+  const current = (client.tags || []).find(t => t === 'P0' || t === 'P1') || null
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  if (!canEdit) return <PriorityBadge tags={client.tags} />
+
+  async function setPriority(p) {
+    const otherTags = (client.tags || []).filter(t => t !== 'P0' && t !== 'P1')
+    const newTags = p ? [...otherTags, p] : otherTags
+    await updateClient.mutateAsync({ id: client.id, tags: newTags })
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={e => { e.preventDefault(); setOpen(o => !o) }} className="cursor-pointer">
+        <PriorityBadge tags={client.tags} />
+      </button>
+      {open && (
+        <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-border rounded-xl shadow-lg py-1 min-w-[90px]">
+          {['P0', 'P1'].map(p => (
+            <button key={p} onClick={() => setPriority(p)}
+              className={`w-full text-left px-3 py-1.5 text-xs font-bold hover:bg-zamp-50 transition-colors ${current === p ? 'text-zamp-600' : 'text-gray-700'}`}>
+              {p} {current === p && '✓'}
+            </button>
+          ))}
+          {current && (
+            <button onClick={() => setPriority(null)}
+              className="w-full text-left px-3 py-1.5 text-xs text-gray-400 hover:bg-gray-50 transition-colors border-t border-border mt-1">
+              Clear
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Inline Health Editor ─────────────────────────────────────────────────────
+function InlineHealth({ client, canEdit }) {
+  const [open, setOpen] = useState(false)
+  const updateClient = useUpdateClient()
+  const ref = useRef(null)
+
+  useEffect(() => {
+    if (!open) return
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [open])
+
+  if (!canEdit) return <HealthBadge health={client.health} />
+
+  const HEALTH_LABELS = { green: '🟢 Green', yellow: '🟡 Yellow', red: '🔴 Red' }
+
+  async function setHealth(h) {
+    await updateClient.mutateAsync({ id: client.id, health: h })
+    setOpen(false)
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <button onClick={e => { e.preventDefault(); setOpen(o => !o) }} className="cursor-pointer">
+        <HealthBadge health={client.health} />
+      </button>
+      {open && (
+        <div className="absolute z-50 left-0 top-full mt-1 bg-white border border-border rounded-xl shadow-lg py-1 min-w-[110px]">
+          {['green', 'yellow', 'red'].map(h => (
+            <button key={h} onClick={() => setHealth(h)}
+              className={`w-full text-left px-3 py-1.5 text-xs font-medium hover:bg-zamp-50 transition-colors ${client.health === h ? 'text-zamp-600' : 'text-gray-700'}`}>
+              {HEALTH_LABELS[h]} {client.health === h && '✓'}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ─── Add Client Modal ─────────────────────────────────────────────────────────
+function AddClientModal({ pods, onClose }) {
+  const createClient = useCreateClient()
+  const [form, setForm] = useState({
+    name: '', stage: 'prospect', health: 'green', arr: '', industry: '', pod_id: '', tags: []
+  })
+
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
+
+  const toggleTag = (tag) =>
+    setForm(f => ({
+      ...f,
+      tags: f.tags.includes(tag) ? f.tags.filter(t => t !== tag) : [...f.tags, tag]
+    }))
+
+  async function handleSubmit(e) {
+    e.preventDefault()
+    if (!form.name.trim()) return
+    await createClient.mutateAsync({
+      name: form.name.trim(),
+      stage: form.stage,
+      health: form.health,
+      arr: form.arr ? Number(form.arr) : 0,
+      industry: form.industry,
+      pod_id: form.pod_id ? Number(form.pod_id) : null,
+      tags: form.tags,
+    })
+    onClose()
+  }
+
+  const inputCls = "w-full px-3 py-2.5 text-sm border border-border rounded-xl focus:outline-none focus:ring-2 focus:ring-zamp-500/30 focus:border-zamp-500 bg-white"
+  const labelCls = "block text-xs font-semibold text-gray-600 mb-1.5"
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 overflow-hidden">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center gap-2.5">
+            <Plus className="w-4 h-4 text-zamp-600" />
+            <h2 className="text-base font-semibold text-gray-900">Add New Client</h2>
+          </div>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-surface-page text-gray-400 transition-colors">
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          {/* Name */}
+          <div>
+            <label className={labelCls}>Client name <span className="text-red-400">*</span></label>
+            <input
+              autoFocus required
+              type="text"
+              value={form.name}
+              onChange={e => set('name', e.target.value)}
+              placeholder="e.g. Stripe, Airbnb…"
+              className={inputCls}
+            />
+          </div>
+
+          {/* Industry + ARR side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Industry</label>
+              <input
+                type="text"
+                value={form.industry}
+                onChange={e => set('industry', e.target.value)}
+                placeholder="e.g. Fintech"
+                className={inputCls}
+              />
+            </div>
+            <div>
+              <label className={labelCls}>ARR ($)</label>
+              <input
+                type="number"
+                min="0"
+                value={form.arr}
+                onChange={e => set('arr', e.target.value)}
+                placeholder="0"
+                className={inputCls}
+              />
+            </div>
+          </div>
+
+          {/* Stage + Health side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className={labelCls}>Stage</label>
+              <select value={form.stage} onChange={e => set('stage', e.target.value)} className={inputCls}>
+                {['prospect','poc','pilot','live','churned'].map(s => (
+                  <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelCls}>Health</label>
+              <select value={form.health} onChange={e => set('health', e.target.value)} className={inputCls}>
+                <option value="green">Green</option>
+                <option value="yellow">Yellow</option>
+                <option value="red">Red</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Pod */}
+          <div>
+            <label className={labelCls}>Pod <span className="font-normal text-gray-400">(optional)</span></label>
+            <select value={form.pod_id} onChange={e => set('pod_id', e.target.value)} className={inputCls}>
+              <option value="">Unassigned</option>
+              {pods.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+
+          {/* Priority tags */}
+          <div>
+            <label className={labelCls}>Priority</label>
+            <div className="flex gap-2">
+              {['P0', 'P1'].map(tag => (
+                <button
+                  key={tag} type="button"
+                  onClick={() => toggleTag(tag)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-bold border transition-colors ${
+                    form.tags.includes(tag)
+                      ? tag === 'P0' ? 'bg-red-500 text-white border-red-500' : 'bg-amber-500 text-white border-amber-500'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-zamp-300'
+                  }`}
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-3 pt-1">
+            <button type="button" onClick={onClose}
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border border-border text-gray-600 hover:bg-surface-page transition-colors">
+              Cancel
+            </button>
+            <button type="submit" disabled={!form.name.trim() || createClient.isPending}
+              className="flex-1 px-4 py-2.5 rounded-xl text-sm font-medium bg-zamp-600 text-white hover:bg-zamp-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+              {createClient.isPending
+                ? <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                : <Plus className="w-3.5 h-3.5" />}
+              Add Client
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
 
 // ─── Transfer Modal ────────────────────────────────────────────────────────────
 function TransferModal({ client, pods, onClose }) {
@@ -107,8 +352,9 @@ function fmt(n) {
   return `$${n}`
 }
 
-const STAGE_OPTS  = ['live', 'poc', 'pilot', 'prospect', 'churned']
-const HEALTH_OPTS = ['green', 'yellow', 'red']
+const STAGE_OPTS    = ['live', 'poc', 'pilot', 'prospect', 'churned']
+const HEALTH_OPTS   = ['green', 'yellow', 'red']
+const PRIORITY_OPTS = ['P0', 'P1']
 
 function Chip({ label, onRemove }) {
   return (
@@ -121,17 +367,175 @@ function Chip({ label, onRemove }) {
 
 const POD_SCOPED_ROLES = ['ASA', 'ASM', 'GM']
 
+/* ─── POC Cell ────────────────────────────────────────────────────────────── */
+function PocCell({ client, canEdit }) {
+  const [query,   setQuery]   = useState('')
+  const [open,    setOpen]    = useState(false)
+  const [adding,  setAdding]  = useState(false)
+  const addPoc    = useAddPoc(client.id)
+  const removePoc = useRemovePoc(client.id)
+  const { data: allZampians = [] } = useZampians()
+  const containerRef = useRef(null)
+
+  // Support both `pocs: [{zampian_id, name}]` and `poc_names: string[]`
+  const pocs = useMemo(() => {
+    if (Array.isArray(client.pocs)) return client.pocs
+    if (Array.isArray(client.poc_names)) return client.poc_names.map((n, i) => ({ zampian_id: i, name: n }))
+    return []
+  }, [client.pocs, client.poc_names])
+
+  // IDs already added — exclude from dropdown
+  const existingIds = useMemo(() => new Set(pocs.map(p => p.zampian_id)), [pocs])
+
+  // Filter by query (name or email), exclude already-added
+  const suggestions = useMemo(() => {
+    const q = query.toLowerCase().trim()
+    return allZampians.filter(z =>
+      !existingIds.has(z.id) &&
+      (z.name.toLowerCase().includes(q) || (z.email || '').toLowerCase().includes(q))
+    ).slice(0, 8)
+  }, [allZampians, existingIds, query])
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!open) return
+    function handleClick(e) {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [open])
+
+  function handleSelect(zampian) {
+    addPoc.mutate(zampian.email, {
+      onSuccess: () => {
+        setQuery('')
+        setOpen(false)
+        setAdding(false)
+      },
+    })
+  }
+
+  function handleCancel(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    setAdding(false)
+    setQuery('')
+    setOpen(false)
+  }
+
+  if (!canEdit) {
+    return (
+      <div className="flex items-center gap-1 text-xs text-gray-400 opacity-60">
+        <Lock className="w-3 h-3 flex-shrink-0" />
+        <span>{pocs.map(p => p.name).join(', ') || '—'}</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="text-xs text-gray-600 space-y-1">
+      {pocs.map((p) => (
+        <div key={p.zampian_id} className="flex items-center gap-1">
+          <span>{p.name}</span>
+          <button
+            onClick={(e) => { e.preventDefault(); removePoc.mutate(p.zampian_id) }}
+            className="text-gray-300 hover:text-red-400 transition-colors ml-0.5"
+            title="Remove POC"
+          >
+            <X className="w-3 h-3" />
+          </button>
+        </div>
+      ))}
+
+      {adding ? (
+        <div
+          ref={containerRef}
+          className="relative mt-1"
+          onClick={e => e.preventDefault()}
+        >
+          <div className="flex items-center gap-1">
+            <input
+              autoFocus
+              type="text"
+              value={query}
+              onChange={e => { setQuery(e.target.value); setOpen(true) }}
+              onFocus={() => setOpen(true)}
+              placeholder="Search name or email…"
+              className="w-40 px-1.5 py-0.5 text-xs border border-zamp-300 rounded focus:outline-none focus:ring-1 focus:ring-zamp-400"
+              onClick={e => e.stopPropagation()}
+              disabled={addPoc.isPending}
+            />
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="text-gray-300 hover:text-gray-500"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+
+          {open && suggestions.length > 0 && (
+            <ul
+              className="absolute z-50 left-0 top-full mt-0.5 w-52 bg-white border border-border rounded-lg shadow-lg py-1 max-h-48 overflow-y-auto"
+              onMouseDown={e => e.preventDefault()}
+            >
+              {suggestions.map(z => (
+                <li key={z.id}>
+                  <button
+                    type="button"
+                    className="w-full text-left px-3 py-1.5 hover:bg-zamp-50 transition-colors disabled:opacity-40"
+                    disabled={addPoc.isPending}
+                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleSelect(z) }}
+                  >
+                    <span className="font-medium text-gray-800">{z.name}</span>
+                    <span className="text-gray-400 ml-1">({z.email})</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {open && query.trim() && suggestions.length === 0 && (
+            <div className="absolute z-50 left-0 top-full mt-0.5 w-52 bg-white border border-border rounded-lg shadow-lg px-3 py-2 text-gray-400">
+              No matches
+            </div>
+          )}
+        </div>
+      ) : (
+        <button
+          onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAdding(true) }}
+          className="flex items-center gap-0.5 text-zamp-500 hover:text-zamp-700 transition-colors"
+        >
+          <Plus className="w-3 h-3" />
+          <span>Add POC</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function Clients() {
   const { data: clients = [], isLoading } = useClients()
   const { data: pods = [] } = usePods()
   const { role, user } = useAuth()
   const [transferClient, setTransferClient] = useState(null)
+  const [showAddClient,  setShowAddClient]  = useState(false)
   const [searchParams, setSearchParams] = useSearchParams()
 
   // Who can initiate a transfer:
   //   - GM whose pod_id === C2C_POD_ID
   //   - SUPERADMIN regardless of pod (full access)
   const isC2cGm = role === 'SUPERADMIN' || (role === 'GM' && Number(user?.zampian?.pod_id) === C2C_POD_ID)
+
+  // Who can edit priority/health inline:
+  //   - SUPERADMIN: all clients
+  //   - GM/ASM: only clients in their own pod
+  const canEditClient = (c) =>
+    role === 'SUPERADMIN' ||
+    ((role === 'GM' || role === 'ASM') && Number(user?.zampian?.pod_id) === Number(c.pod_id))
 
   // If Dashboard linked here with ?pod=<id>, resolve that to a pod name for the filter
   const podIdFromQuery = searchParams.get('pod')
@@ -143,10 +547,11 @@ export default function Clients() {
   const [search,      setSearch]      = useState('')
   const [stages,      setStages]      = useState([])
   const [healths,     setHealths]     = useState([])
+  const [priorities,  setPriorities]  = useState([])
   // Start with the raw pod id from the URL so we can resolve it once pods load.
   // Falls back to an empty array; the useEffect below will set the real name.
   const [podFilter,   setPodFilter]   = useState([])
-  const [sortKey,     setSortKey]     = useState('health')
+  const [sortKey,     setSortKey]     = useState('arr')
   const [showFilters, setShowFilters] = useState(false)
 
   // Once pods have loaded, resolve the filter in priority order:
@@ -181,31 +586,41 @@ export default function Clients() {
   const filtered = useMemo(() => {
     let list = clients
     if (search)          list = list.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || (c.industry||'').toLowerCase().includes(search.toLowerCase()))
-    if (stages.length)   list = list.filter(c => stages.includes(c.stage))
-    if (healths.length)  list = list.filter(c => healths.includes(c.health))
-    if (podFilter.length) list = list.filter(c => podFilter.includes(c.pod_name))
+    if (stages.length)     list = list.filter(c => stages.includes(c.stage))
+    if (healths.length)    list = list.filter(c => healths.includes(c.health))
+    if (priorities.length) list = list.filter(c => (c.tags || []).some(t => priorities.includes(t)))
+    if (podFilter.length)  list = list.filter(c => podFilter.includes(c.pod_name))
 
     const hOrd = { red: 0, yellow: 1, green: 2 }
     const sOrd = { live: 0, poc: 1, pilot: 2, prospect: 3, churned: 4 }
     if (sortKey === 'health') list = [...list].sort((a,b) => (hOrd[a.health]??9) - (hOrd[b.health]??9))
     if (sortKey === 'stage')  list = [...list].sort((a,b) => (sOrd[a.stage]??9)  - (sOrd[b.stage]??9))
-    if (sortKey === 'arr')    list = [...list].sort((a,b) => (Number(b.arr)||0) - (Number(a.arr)||0))
-    if (sortKey === 'name')   list = [...list].sort((a,b) => a.name.localeCompare(b.name))
+    if (sortKey === 'arr')      list = [...list].sort((a,b) => (Number(b.arr)||0) - (Number(a.arr)||0))
+    if (sortKey === 'name')     list = [...list].sort((a,b) => a.name.localeCompare(b.name))
+    if (sortKey === 'priority') {
+      const pOrd = { P0: 0, P1: 1 }
+      list = [...list].sort((a,b) => {
+        const aP = (a.tags||[]).find(t => t==='P0'||t==='P1')
+        const bP = (b.tags||[]).find(t => t==='P0'||t==='P1')
+        return (pOrd[aP]??9) - (pOrd[bP]??9)
+      })
+    }
     return list
-  }, [clients, search, stages, healths, podFilter, sortKey])
+  }, [clients, search, stages, healths, priorities, podFilter, sortKey])
 
   const activeFilters = [
-    ...stages.map(s   => ({ label: s, onRemove: () => toggle(stages, setStages, s) })),
-    ...healths.map(h  => ({ label: h, onRemove: () => toggle(healths, setHealths, h) })),
-    ...podFilter.map(p => ({ label: p, onRemove: () => toggle(podFilter, setPodFilter, p) })),
+    ...stages.map(s      => ({ label: s, onRemove: () => toggle(stages,     setStages,     s) })),
+    ...healths.map(h     => ({ label: h, onRemove: () => toggle(healths,    setHealths,    h) })),
+    ...priorities.map(p  => ({ label: p, onRemove: () => toggle(priorities, setPriorities, p) })),
+    ...podFilter.map(p   => ({ label: p, onRemove: () => toggle(podFilter,  setPodFilter,  p) })),
   ]
 
   if (isLoading) return <div className="flex items-center justify-center h-96"><Spinner /></div>
 
   const isPodScoped = POD_SCOPED_ROLES.includes(role)
 
-  // Column headers — add Transfer column for C2C GM
-  const tableHeaders = ['Client', 'Stage', 'Health', 'ARR', 'Pod', 'Team', 'Open Tasks', ...(isC2cGm ? [''] : [])]
+  // Column headers — replace Team with POC; add Transfer column for C2C GM
+  const tableHeaders = ['Client', 'Priority', 'Stage', 'Health', 'ARR', 'Pod', 'POC', 'Open Tasks', ...(isC2cGm ? [''] : [])]
   const userPodName = isPodScoped
     ? pods.find(p => String(p.id) === String(user?.zampian?.pod_id))?.name
     : null
@@ -220,11 +635,24 @@ export default function Clients() {
           onClose={() => setTransferClient(null)}
         />
       )}
+      {showAddClient && (
+        <AddClientModal
+          pods={pods}
+          onClose={() => setShowAddClient(false)}
+        />
+      )}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Clients</h1>
           <p className="text-sm text-gray-500 mt-0.5">{filtered.length} of {clients.length} shown</p>
         </div>
+        <button
+          onClick={() => setShowAddClient(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-zamp-600 text-white hover:bg-zamp-700 transition-colors shadow-sm"
+        >
+          <Plus className="w-4 h-4" />
+          Add Client
+        </button>
 
         {/* My Pod / All Clients quick toggle — only for ASA/ASM */}
         {isPodScoped && userPodName && (
@@ -288,6 +716,7 @@ export default function Clients() {
           className="btn-ghost border border-border pr-8 cursor-pointer text-sm"
         >
           <option value="health">Sort: Health</option>
+          <option value="priority">Sort: Priority</option>
           <option value="stage">Sort: Stage</option>
           <option value="arr">Sort: ARR</option>
           <option value="name">Sort: Name</option>
@@ -295,7 +724,7 @@ export default function Clients() {
       </div>
 
       {showFilters && (
-        <div className="bg-white border border-border rounded-xl p-4 mb-4 grid grid-cols-3 gap-6">
+        <div className="bg-white border border-border rounded-xl p-4 mb-4 grid grid-cols-4 gap-6">
           <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Stage</p>
             <div className="flex flex-wrap gap-1.5">
@@ -309,6 +738,20 @@ export default function Clients() {
             </div>
           </div>
           <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Priority</p>
+            <div className="flex flex-wrap gap-1.5">
+              {PRIORITY_OPTS.map(p => (
+                <button key={p} onClick={() => toggle(priorities, setPriorities, p)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors
+                    ${priorities.includes(p)
+                      ? p === 'P0' ? 'bg-red-500 text-white border-red-500' : 'bg-amber-500 text-white border-amber-500'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-zamp-300'}`}>
+                  {p}
+                </button>
+              ))}
+            </div>
+          </div>
+                    <div>
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Health</p>
             <div className="flex flex-wrap gap-1.5">
               {HEALTH_OPTS.map(h => (
@@ -338,7 +781,7 @@ export default function Clients() {
       {activeFilters.length > 0 && (
         <div className="flex flex-wrap gap-2 mb-4">
           {activeFilters.map((f, i) => <Chip key={i} label={f.label} onRemove={f.onRemove} />)}
-          <button onClick={() => { setStages([]); setHealths([]); setPodFilter([]) }}
+          <button onClick={() => { setStages([]); setHealths([]); setPriorities([]); setPodFilter([]) }}
             className="text-xs text-gray-400 hover:text-gray-600 underline">Clear all</button>
         </div>
       )}
@@ -366,12 +809,16 @@ export default function Clients() {
                     </div>
                   </Link>
                 </td>
+                <td className="px-5 py-3.5"><InlinePriority client={c} canEdit={canEditClient(c)} /></td>
                 <td className="px-5 py-3.5"><StageBadge stage={c.stage} /></td>
-                <td className="px-5 py-3.5"><HealthBadge health={c.health} /></td>
+                <td className="px-5 py-3.5"><InlineHealth client={c} canEdit={canEditClient(c)} /></td>
                 <td className="px-5 py-3.5 text-sm font-medium text-gray-700">{fmt(Number(c.arr))}</td>
                 <td className="px-5 py-3.5 text-sm text-gray-600">{c.pod_name || '—'}</td>
-                <td className="px-5 py-3.5 text-xs text-gray-500">
-                  {[c.csm_name, c.ae_name].filter(Boolean).join(', ') || '—'}
+                <td className="px-5 py-3.5">
+                  <PocCell
+                    client={c}
+                    canEdit={role === 'SUPERADMIN' || user?.zampian?.pod_id === c.pod_id}
+                  />
                 </td>
                 <td className="px-5 py-3.5">
                   {c.open_tasks_count > 0
@@ -381,7 +828,7 @@ export default function Clients() {
                 </td>
                 {isC2cGm && (
                   <td className="px-5 py-3.5">
-                    {c.pod_id === C2C_POD_ID && (
+                    {Number(c.pod_id) === C2C_POD_ID && (
                       <button
                         onClick={(e) => { e.preventDefault(); setTransferClient(c) }}
                         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium text-zamp-600 hover:bg-zamp-50 border border-zamp-200 hover:border-zamp-300 transition-colors"

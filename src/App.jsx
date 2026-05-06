@@ -12,6 +12,7 @@ import Approvals from './pages/Approvals'
 import Pods from './pages/Pods'
 import Settings from './pages/Settings'
 import Revenue from './pages/Revenue'
+import Outreach from './pages/Outreach'
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
@@ -47,6 +48,8 @@ export default function App() {
         <Route path="pods" element={<Pods />} />
         <Route path="settings" element={<Settings />} />
         <Route path="revenue" element={<Revenue />} />
+        <Route path="outreach" element={<Outreach />} />
+        <Route path="outreach/:jobId" element={<Outreach />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>

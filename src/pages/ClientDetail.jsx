@@ -1479,11 +1479,13 @@ function ProcessDetail({ clientId, processId, onBack, canEdit }) {
   const [editActionDesc,      setEditActionDesc]      = useState('')
   const [editActionDue,       setEditActionDue]       = useState('')
   const [editBlockerContent,  setEditBlockerContent]  = useState('')
+  const [editBlockerResolved, setEditBlockerResolved] = useState(false)
 
   const qKey = ['process', clientId, processId]
   const { mutate: mutateUpdateUpdate } = useMutation({
     mutationFn: ({ updateId, data }) => updateUpdate(clientId, processId, updateId, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: qKey }); setEditingUpdateId(null) },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: qKey });
+setEditingUpdateId(null) },
   })
   const { mutate: mutateDeleteUpdate } = useMutation({
     mutationFn: (updateId) => deleteUpdate(clientId, processId, updateId),
@@ -1763,9 +1765,10 @@ function ProcessDetail({ clientId, processId, onBack, canEdit }) {
               <Flag size={13} className="text-red-400 flex-shrink-0 mt-0.5" />
               <div className="flex-1 min-w-0">
                 {editingBlockerId === b.id ? (
-                  <form onSubmit={e => { e.preventDefault(); mutateUpdateBlocker({ blockerId: b.id, data: { content: editBlockerContent } }) }} className="space-y-1">
+                  <form onSubmit={e => { e.preventDefault(); mutateUpdateBlocker({ blockerId: b.id, data: { content: editBlockerContent, resolved: editBlockerResolved } }) }} className="space-y-1">
                     <textarea rows={2} autoFocus value={editBlockerContent} onChange={e => setEditBlockerContent(e.target.value)}
                       className="w-full px-2 py-1 text-[13px] border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-400/40 resize-none bg-white" />
+                    <label className="flex items-center gap-1.5 text-[12px] text-gray-600 mt-1"><input type="checkbox" checked={editBlockerResolved} onChange={e => setEditBlockerResolved(e.target.checked)} className="rounded" /> Mark as resolved</label>
                     <div className="flex gap-1.5">
                       <button type="submit" className="px-2 py-1 text-[11px] bg-zamp-600 text-white rounded-md hover:bg-zamp-700">Save</button>
                       <button type="button" onClick={() => setEditingBlockerId(null)} className="px-2 py-1 text-[11px] border border-gray-200 text-gray-500 rounded-md hover:bg-gray-50">Cancel</button>
@@ -1821,6 +1824,7 @@ function ProcessFormModal({ clientId, process = null, onClose }) {
   // Pre-populate poc from existing process
   const { data: allZampians = [] } = useZampians()
   useEffect(() => {
+
     if (process?.poc_id && allZampians.length) {
       setPocZampian(allZampians.find(z => z.id === process.poc_id) || null)
     }

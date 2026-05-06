@@ -49,6 +49,18 @@ export function useUpdateClient() {
   })
 }
 
+export function useCreateClient() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.createClient(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['clients'] })
+      toast.success('Client added successfully')
+    },
+    onError: (err) => toast.error(err || 'Failed to add client'),
+  })
+}
+
 // ─── Pods ────────────────────────────────────────────────────────────────────
 export function usePods() {
   return useQuery({
@@ -515,6 +527,187 @@ export function useMarkAllRead() {
   return useMutation({
     mutationFn: () => api.markAllRead(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  })
+}
+
+// ─── POCs ─────────────────────────────────────────────────────────────────────
+
+export function useAddPoc(clientId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (email) => api.addPoc(clientId, email),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['clients'] }),
+    onError: (e) => toast.error(e || 'Failed to add POC.'),
+  })
+}
+
+export function useRemovePoc(clientId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (zampianId) => api.removePoc(clientId, zampianId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['clients'] }),
+    onError: (e) => toast.error(e || 'Failed to remove POC.'),
+  })
+}
+
+// ─── Processes ────────────────────────────────────────────────────────────────
+
+export function useProcesses(clientId) {
+  return useQuery({
+    queryKey: ['processes', clientId],
+    queryFn: () => api.processes(clientId),
+    enabled: !!clientId,
+    staleTime: 30_000,
+  })
+}
+
+export function useCreateProcess(clientId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.createProcess(clientId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['processes', clientId] }),
+    onError: (e) => toast.error(e || 'Failed to create process.'),
+  })
+}
+
+export function useUpdateProcess(clientId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ processId, ...body }) => api.updateProcess(clientId, processId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['processes', clientId] }),
+    onError: (e) => toast.error(e || 'Failed to update process.'),
+  })
+}
+
+export function useDeleteProcess(clientId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (processId) => api.deleteProcess(clientId, processId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['processes', clientId] }),
+    onError: (e) => toast.error(e || 'Failed to delete process.'),
+  })
+}
+
+export function useProcess(clientId, processId) {
+  return useQuery({
+    queryKey: ['process', clientId, processId],
+    queryFn: () => api.process(clientId, processId),
+    enabled: !!clientId && !!processId,
+    staleTime: 20_000,
+  })
+}
+
+export function useAddUpdate(clientId, processId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.addUpdate(clientId, processId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['process', clientId, processId] }),
+    onError: (e) => toast.error(e || 'Failed to add update.'),
+  })
+}
+
+export function useAddActionItem(clientId, processId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.addActionItem(clientId, processId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['process', clientId, processId] }),
+    onError: (e) => toast.error(e || 'Failed to add action item.'),
+  })
+}
+
+export function useToggleActionItem(clientId, processId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, currentDone }) => {
+      // Issue 1 fix: toggle status between 'open' and 'done' via PATCH
+      const newStatus = currentDone ? 'open' : 'done'
+      return api.toggleActionItem(clientId, processId, id, newStatus)
+    },
+    onMutate: async ({ id, currentDone }) => {
+      await qc.cancelQueries({ queryKey: ['process', clientId, processId] })
+      const prev = qc.getQueryData(['process', clientId, processId])
+      qc.setQueryData(['process', clientId, processId], (old) => {
+        if (!old) return old
+        const newStatus = currentDone ? 'open' : 'done'
+        return {
+          ...old,
+          action_items: (old.action_items || []).map(a =>
+            a.id === id ? { ...a, status: newStatus, done: !currentDone } : a
+          ),
+        }
+      })
+      return { prev }
+    },
+    onError: (_e, _v, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['process', clientId, processId], ctx.prev)
+      toast.error('Failed to toggle action item.')
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['process', clientId, processId] }),
+  })
+}
+
+export function useAddBlocker(clientId, processId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.addBlocker(clientId, processId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['process', clientId, processId] }),
+    onError: (e) => toast.error(e || 'Failed to add blocker.'),
+  })
+}
+
+export function useResolveBlocker(clientId, processId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.resolveBlocker(clientId, processId, id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['process', clientId, processId] }),
+    onError: (e) => toast.error(e || 'Failed to resolve blocker.'),
+  })
+}
+
+// ─── Comments ─────────────────────────────────────────────────────────────────
+
+export function useComments(processId) {
+  return useQuery({
+    queryKey: ['comments', processId],
+    queryFn: () => api.comments(processId),
+    enabled: !!processId,
+    staleTime: 15_000,
+  })
+}
+
+export function useAddComment(processId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.addComment(processId, body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['comments', processId] }),
+    onError: (e) => toast.error(e || 'Failed to post comment.'),
+  })
+}
+
+export function useDeleteComment(processId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (commentId) => api.deleteComment(processId, commentId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['comments', processId] }),
+    onError: (e) => toast.error(e || 'Failed to delete comment.'),
+  })
+}
+
+export function useAddReaction(processId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ commentId, emoji }) => api.addReaction(processId, commentId, emoji),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['comments', processId] }),
+    onError: (e) => toast.error(e || 'Failed to add reaction.'),
+  })
+}
+
+export function useRemoveReaction(processId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ commentId, emoji }) => api.removeReaction(processId, commentId, emoji),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['comments', processId] }),
+    onError: (e) => toast.error(e || 'Failed to remove reaction.'),
   })
 }
 

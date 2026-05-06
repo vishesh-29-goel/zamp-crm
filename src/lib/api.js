@@ -26,7 +26,8 @@ export const api = {
   // Core entities
   clients:    (params = {}) => http.get('/clients', { params }),
   client:     (id)          => http.get(`/clients/${id}`),
-  updateClient: (id, body)  => http.patch(`/clients/${id}`, body),
+  updateClient:  (id, body)  => http.patch(`/clients/${id}`, body),
+  createClient:  (body)      => http.post('/clients', body),
 
   pods:        ()           => http.get('/pods'),
   createPod:   (body)       => http.post('/pods', body),

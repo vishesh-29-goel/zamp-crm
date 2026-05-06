@@ -163,9 +163,12 @@ function ClientRow({ client }) {
 
 // ─── Pod card ─────────────────────────────────────────────────────────────────
 
-function PodCard({ pod, podStats, canEdit, onEdit, defaultOpen }) {
-  const [open, setOpen] = useState(defaultOpen)
+function PodCard({ pod, podStats, canEdit, onEdit, defaultOpen, allZampians }) {
+  const [open, setOpen]   = useState(defaultOpen)
+  const [tab,  setTab]    = useState('clients')
   const { data: clients = [], isLoading } = usePodClients(open ? pod.id : null)
+
+  const members = allZampians.filter(z => z.pod_id === pod.id)
 
   const stats = podStats[pod.id] || { arr: 0, clients: 0, green: 0, yellow: 0, red: 0 }
   const greenPct = stats.clients > 0 ? Math.round((stats.green / stats.clients) * 100) : 0
@@ -231,20 +234,77 @@ function PodCard({ pod, podStats, canEdit, onEdit, defaultOpen }) {
         )}
       </div>
 
-      {/* Client list */}
+      {/* Tab bar + content */}
       {open && (
         <div className="border-t border-border-subtle">
-          {isLoading ? (
-            <div className="flex justify-center py-8"><Spinner /></div>
-          ) : clients.length === 0 ? (
-            <div className="flex flex-col items-center gap-1.5 py-8 text-center">
-              <Building2 className="w-6 h-6 text-gray-200" />
-              <p className="text-sm text-gray-400">No clients assigned to this pod</p>
-            </div>
-          ) : (
-            <div className="divide-y divide-border-subtle">
-              {clients.map(c => <ClientRow key={c.id} client={c} />)}
-            </div>
+          {/* Tabs */}
+          <div className="flex border-b border-border-subtle px-5 gap-4">
+            <button
+              onClick={() => setTab('clients')}
+              className={`py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                tab === 'clients'
+                  ? 'border-zamp-500 text-zamp-600'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              Clients ({clients.length || 0})
+            </button>
+            <button
+              onClick={() => setTab('members')}
+              className={`py-2.5 text-xs font-semibold border-b-2 transition-colors ${
+                tab === 'members'
+                  ? 'border-zamp-500 text-zamp-600'
+                  : 'border-transparent text-gray-400 hover:text-gray-600'
+              }`}
+            >
+              Members ({members.length})
+            </button>
+          </div>
+
+          {/* Clients tab */}
+          {tab === 'clients' && (
+            isLoading ? (
+              <div className="flex justify-center py-8"><Spinner /></div>
+            ) : clients.length === 0 ? (
+              <div className="flex flex-col items-center gap-1.5 py-8 text-center">
+                <Building2 className="w-6 h-6 text-gray-200" />
+                <p className="text-sm text-gray-400">No clients assigned to this pod</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border-subtle">
+                {clients.map(c => <ClientRow key={c.id} client={c} />)}
+              </div>
+            )
+          )}
+
+          {/* Members tab */}
+          {tab === 'members' && (
+            members.length === 0 ? (
+              <div className="flex flex-col items-center gap-1.5 py-8 text-center">
+                <Users className="w-6 h-6 text-gray-200" />
+                <p className="text-sm text-gray-400">No members in this pod</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-border-subtle">
+                {members.map(z => (
+                  <div key={z.id} className="flex items-center gap-3 px-5 py-3">
+                    <div className="w-7 h-7 rounded-full bg-zamp-50 border border-zamp-100 flex items-center justify-center flex-shrink-0">
+                      <span className="text-xs font-bold text-zamp-600">{z.name[0]}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{z.name}</p>
+                    </div>
+                    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold border flex-shrink-0 ${
+                      z.role === 'GM'  ? 'bg-purple-50 text-purple-700 border-purple-200' :
+                      z.role === 'ASM' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                                         'bg-gray-50 text-gray-600 border-gray-200'
+                    }`}>
+                      {z.role}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </div>
       )}
@@ -380,6 +440,7 @@ export default function Pods() {
             canEdit={canManage}
             onEdit={p => setModal({ pod: p })}
             defaultOpen={i === 0}
+            allZampians={zampians}
           />
         ))}
       </div>

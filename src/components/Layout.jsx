@@ -3,13 +3,22 @@ import { NavLink, Outlet, Link } from 'react-router-dom'
 import {
   LayoutDashboard, Users, CheckSquare, Signal,
   BarChart2, Settings, LogOut, ChevronDown, ShieldAlert, Layers, DollarSign,
-  Bell, Clock, Zap, AlertTriangle, MessageSquare, CheckCheck, X
+  Bell, Clock, Zap, AlertTriangle, MessageSquare, CheckCheck, X, Send
 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
 import { useApprovals, useNotifications, useMarkRead, useMarkAllRead } from '../lib/useApi'
 
 const APPROVER_ROLES = ['CEO', 'GM', 'SUPERADMIN']
+const OUTREACH_POD_ID = 4  // C2C Pod
+const OUTREACH_BYPASS_ROLES = ['CEO', 'SUPERADMIN']
+
+function canSeeOutreach(user) {
+  const z = user?.zampian
+  if (!z) return false
+  if (OUTREACH_BYPASS_ROLES.includes(z.role)) return true
+  return z.pod_id === OUTREACH_POD_ID
+}
 
 const BASE_NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -215,6 +224,22 @@ export default function Layout() {
               {label}
             </NavLink>
           ))}
+
+          {/* Outreach — gated to Pod 4 (C2C) + SUPERADMIN + CEO */}
+          {canSeeOutreach(user) && (
+            <NavLink
+              to="/outreach"
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+                ${isActive
+                  ? 'bg-zamp-50 text-zamp-600'
+                  : 'text-gray-500 hover:bg-surface-page hover:text-gray-900'}`
+              }
+            >
+              <Send className="w-4 h-4 flex-shrink-0" />
+              Outreach
+            </NavLink>
+          )}
 
           {/* Approvals — visible to all, badge only for approvers with pending items */}
           <NavLink
