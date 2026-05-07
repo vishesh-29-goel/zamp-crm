@@ -152,21 +152,22 @@ export const api = {
   cancelOutreachJob:   (jobId)             => http.post(`/outreach/jobs/${jobId}/cancel`),
 }
 
-// Issue 3: Edit/delete methods for updates, action items, blockers
+// Edit/delete methods for updates, action items, blockers
+// NOTE: use `http` (the axios instance), NOT `api` (a plain object with no .patch/.delete)
 export const updateUpdate = (clientId, processId, updateId, data) =>
-  api.patch(`/clients/${clientId}/processes/${processId}/updates/${updateId}`, data)
+  http.patch(`/clients/${clientId}/processes/${processId}/updates/${updateId}`, data)
 
 export const deleteUpdate = (clientId, processId, updateId) =>
-  api.delete(`/clients/${clientId}/processes/${processId}/updates/${updateId}`)
+  http.delete(`/clients/${clientId}/processes/${processId}/updates/${updateId}`)
 
 export const updateActionItem = (clientId, processId, actionItemId, data) =>
-  api.patch(`/clients/${clientId}/processes/${processId}/action_items/${actionItemId}`, data)
+  http.patch(`/clients/${clientId}/processes/${processId}/action_items/${actionItemId}`, data)
 
 export const deleteActionItem = (clientId, processId, actionItemId) =>
-  api.delete(`/clients/${clientId}/processes/${processId}/action_items/${actionItemId}`)
+  http.delete(`/clients/${clientId}/processes/${processId}/action_items/${actionItemId}`)
 
 export const updateBlocker = (clientId, processId, blockerId, data) =>
-  api.patch(`/clients/${clientId}/processes/${processId}/blockers/${blockerId}`, data)
+  http.patch(`/clients/${clientId}/processes/${processId}/blockers/${blockerId}`, data)
 
 export const deleteBlocker = (clientId, processId, blockerId) =>
-  api.delete(`/clients/${clientId}/processes/${processId}/blockers/${blockerId}`)
+  http.delete(`/clients/${clientId}/processes/${processId}/blockers/${blockerId}`)

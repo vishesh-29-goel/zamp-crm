@@ -1598,9 +1598,9 @@ setEditingUpdateId(null) },
         )}
         {updates.length === 0 && !showAddUpdate
           ? <p className="text-[12px] text-gray-400 italic">No updates yet.</p>
-          : updates.map(u => (
+          : updates.map((u, index) => (
             <div key={u.id} className="flex gap-2.5 py-2.5 border-b border-gray-50 last:border-0 group">
-              <Avatar name={u.author_name || '?'} size="sm" />
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-700 flex-shrink-0">{index + 1}</div>
               <div className="flex-1 min-w-0">
                 {editingUpdateId === u.id ? (
                   <form onSubmit={e => { e.preventDefault(); mutateUpdateUpdate({ updateId: u.id, data: { content: editUpdateContent } }) }} className="space-y-1">
