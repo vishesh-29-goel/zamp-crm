@@ -1,10 +1,19 @@
+import React from 'react'
 import { useState, useEffect, useCallback } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { api } from '../lib/api'
 import DOMPurify from 'dompurify'
 import { format } from 'date-fns'
 import {
-  X, Clock, User, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  Clock,
   ExternalLink,
+  MoreVertical,
+  User,
+  X,
 } from 'lucide-react'
 
 // ---------------------------------------------------------------------------
@@ -135,6 +144,95 @@ function BodyCard({ message }) {
 }
 
 // ---------------------------------------------------------------------------
+// SummaryCard — AI-generated email summary with auto-fire, cache update, regenerate
+// ---------------------------------------------------------------------------
+function SummaryCard({ message, qc, threadId }) {
+  const [isRegenerating, setIsRegenerating] = React.useState(false)
+  const [menuOpen, setMenuOpen] = React.useState(false)
+
+  const summarizeMutation = useMutation({
+    mutationFn: ({ force } = {}) =>
+      api.emailReachOutSummarize(message.id, force ? { force: true } : undefined),
+    onSuccess: (data) => {
+      setIsRegenerating(false)
+      setMenuOpen(false)
+      qc.setQueryData(['email-messages', threadId], (old) => {
+        if (!old) return old
+        return {
+          ...old,
+          messages: old.messages.map((m) =>
+            m.id === message.id ? { ...m, ai_summary: data.ai_summary } : m
+          ),
+        }
+      })
+    },
+    onError: () => {
+      setIsRegenerating(false)
+    },
+  })
+
+  React.useEffect(() => {
+    if (message.ai_summary === null && !summarizeMutation.isPending && !summarizeMutation.isError) {
+      summarizeMutation.mutate({})
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.id, message.ai_summary])
+
+  const isLoading =
+    (summarizeMutation.isPending && !isRegenerating) ||
+    (message.ai_summary === null && !summarizeMutation.isError)
+  const isRegenLoading = summarizeMutation.isPending && isRegenerating
+  const summaryText = isRegenerating
+    ? null
+    : (summarizeMutation.data?.ai_summary ?? message.ai_summary)
+
+  const handleRegenerate = () => {
+    setIsRegenerating(true)
+    setMenuOpen(false)
+    summarizeMutation.mutate({ force: true })
+  }
+
+  return (
+    <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-5 py-4 mb-4 relative">
+      <div className="flex items-center justify-between mb-1.5">
+        <span className="text-indigo-700 font-semibold text-sm">Email Summary</span>
+        <div className="relative">
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="p-1 rounded hover:bg-indigo-100 text-indigo-400 hover:text-indigo-600"
+            title="Summary options"
+          >
+            <MoreVertical className="w-3.5 h-3.5" />
+          </button>
+          {menuOpen && (
+            <div className="absolute right-0 top-6 z-10 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[130px]">
+              <button
+                onClick={handleRegenerate}
+                disabled={isRegenLoading}
+                className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Regenerate
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {summarizeMutation.isError && !isRegenLoading ? (
+        <p className="text-xs text-red-500 italic">
+          Couldn&#39;t generate summary &#8212; click Regenerate to retry
+        </p>
+      ) : isLoading || isRegenLoading || !summaryText ? (
+        <p className="text-indigo-400 text-sm italic">Generating summary…</p>
+      ) : (
+        <p className="text-indigo-900 text-sm leading-relaxed">{summaryText}</p>
+      )}
+    </div>
+  )
+}
+
+
+// ---------------------------------------------------------------------------
 // Main modal
 // ---------------------------------------------------------------------------
 export default function EmailMessageModal({ thread, onClose }) {
@@ -251,7 +349,14 @@ export default function EmailMessageModal({ thread, onClose }) {
           )}
 
           {currentMessage && (
-            <BodyCard message={currentMessage} />
+            <>
+              <SummaryCard
+                message={currentMessage}
+                qc={qc}
+                threadId={thread.id}
+              />
+              <BodyCard message={currentMessage} />
+            </>
           )}
         </div>
 

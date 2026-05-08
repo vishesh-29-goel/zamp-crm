@@ -150,6 +150,16 @@ export const api = {
   editOutreachCsv:     (jobId, csv_data)   => http.patch(`/outreach/jobs/${jobId}/csv`, { csv_data }),
   deployOutreachJob:   (jobId, body)       => http.post(`/outreach/jobs/${jobId}/deploy`, body),
   cancelOutreachJob:   (jobId)             => http.post(`/outreach/jobs/${jobId}/cancel`),
+// Email Reach Out
+emailReachOutThreads:    (params) => http.get('/email-reach-out/threads', { params }),
+emailReachOutStats:      (params) => http.get('/email-reach-out/stats', { params }),
+emailReachOutFilters:    ()       => http.get('/email-reach-out/filters/options'),
+emailReachOutMessages:   (id)     => http.get(`/email-reach-out/threads/${id}/messages`),
+emailReachOutSummarize:  (msgId, params) => http.post(`/email-reach-out/messages/${msgId}/summarize`, params),
+emailReachOutPatchStatus:(id, body) => http.patch(`/email-reach-out/threads/${id}/status`, body),
+emailReachOutReclassify: (id)     => http.post(`/email-reach-out/threads/${id}/reclassify`),
+emailReachOutRefresh:    ()       => http.post('/email-reach-out/refresh'),
+
 }
 
 // Edit/delete methods for updates, action items, blockers
