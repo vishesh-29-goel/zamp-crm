@@ -30,7 +30,7 @@ const BASE_NAV = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/clients',   icon: Users,           label: 'Clients'   },
   { to: '/pods',      icon: Layers,          label: 'Pods'      },
-  { to: '/tasks',     icon: CheckSquare,     label: 'My Tasks'  },
+  { to: '/tasks',     icon: CheckSquare,     label: 'My Work'   },
   { to: '/signals',   icon: Signal,          label: 'Signals'   },
   { to: '/analytics', icon: BarChart2,       label: 'Analytics' },
   { to: '/revenue',   icon: DollarSign,      label: 'Revenue'   },

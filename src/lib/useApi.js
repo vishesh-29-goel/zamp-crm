@@ -759,3 +759,63 @@ export function useResolvePodTransfer() {
     onError: (e) => toast.error(e || 'Failed to resolve transfer.'),
   })
 }
+
+// ─── Obligations (unified tasks + asks + commitments) ──────────────────────
+export function useObligations(clientId, params = {}) {
+  return useQuery({
+    queryKey: ['obligations', clientId, params],
+    queryFn: () => api.obligations(clientId, params),
+    enabled: !!clientId,
+    staleTime: 20_000,
+  })
+}
+
+export function useCreateObligation(clientId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (body) => api.createObligation(clientId, body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['obligations', clientId] })
+      qc.invalidateQueries({ queryKey: ['client', String(clientId)] })
+      qc.invalidateQueries({ queryKey: ['clients'] })
+    },
+    onError: (err) => toast.error(typeof err === 'string' ? err : 'Failed to create obligation.'),
+  })
+}
+
+export function useUpdateObligation(clientId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...body }) => api.updateObligation(clientId, id, body),
+    onMutate: async ({ id, ...updates }) => {
+      await qc.cancelQueries({ queryKey: ['obligations', clientId] })
+      const previous = qc.getQueriesData({ queryKey: ['obligations', clientId] })
+      qc.setQueriesData({ queryKey: ['obligations', clientId] }, (old = []) =>
+        Array.isArray(old) ? old.map(o => o.id === id ? { ...o, ...updates } : o) : old
+      )
+      return { previous }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['obligations', clientId] })
+      qc.invalidateQueries({ queryKey: ['client', String(clientId)] })
+      qc.invalidateQueries({ queryKey: ['clients'] })
+    },
+    onError: (err, _vars, ctx) => {
+      if (ctx?.previous) ctx.previous.forEach(([k, v]) => qc.setQueryData(k, v))
+      toast.error(typeof err === 'string' ? err : 'Failed to update obligation.')
+    },
+  })
+}
+
+export function useDeleteObligation(clientId) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id) => api.deleteObligation(clientId, id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['obligations', clientId] })
+      qc.invalidateQueries({ queryKey: ['client', String(clientId)] })
+      qc.invalidateQueries({ queryKey: ['clients'] })
+    },
+    onError: (err) => toast.error(typeof err === 'string' ? err : 'Failed to delete obligation.'),
+  })
+}

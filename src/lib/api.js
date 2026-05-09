@@ -81,6 +81,12 @@ export const api = {
   snapshots:      (clientId)    => http.get(`/clients/${clientId}/snapshots`),
   createSnapshot: (clientId, body) => http.post(`/clients/${clientId}/snapshots`, body),
 
+  // Obligations (unified tasks + asks + commitments)
+  obligations:        (clientId, params = {}) => http.get(`/clients/${clientId}/obligations`, { params }),
+  createObligation:   (clientId, body)        => http.post(`/clients/${clientId}/obligations`, body),
+  updateObligation:   (clientId, id, body)    => http.patch(`/clients/${clientId}/obligations/${id}`, body),
+  deleteObligation:   (clientId, id)          => http.delete(`/clients/${clientId}/obligations/${id}`),
+
   // Health
   health:     ()            => http.get('/health'),
 

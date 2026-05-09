@@ -9,7 +9,7 @@ import {
   Smile, Trash2, ChevronLeft, Pencil
 } from 'lucide-react'
 import {
-  useClient, useMilestones, useTasks, useAsks, useMeetings, useMeeting,
+  useClient, useMilestones, useObligations, useTasks, useAsks, useMeetings, useMeeting,
   useCommitments, useSignals, useStakeholders,
   useUpdateTask, useUpdateAsk, useUpdateCommitment, useUpdateSignal,
   useProcesses, useProcess, useAddUpdate, useAddActionItem, useToggleActionItem,
@@ -30,6 +30,7 @@ import { InlinePriority, InlineHealth, InlineStage } from '../components/InlineC
 import Spinner from '../components/Spinner'
 import ErrorMessage from '../components/ErrorMessage'
 import TaskDetailPanel from '../components/TaskDetailPanel'
+import ObligationsTab from '../components/ObligationsTab'
 import ZampianCombobox from '../components/ZampianCombobox'
 
 /* ─── tiny helpers ──────────────────────────────────────────────── */
@@ -254,9 +255,9 @@ function ClientHeader({ client, canEdit }) {
 }
 
 /* ─── OVERVIEW TAB ──────────────────────────────────────────────── */
-function OverviewTab({ client, milestones, signals, tasks, asks }) {
-  const openTasks = (tasks||[]).filter(t => !['done','completed','cancelled'].includes(t.status))
-  const openAsks  = (asks||[]).filter(a => a.status === 'open')
+function OverviewTab({ client, milestones, signals, obligations }) {
+  const openInternal = (obligations||[]).filter(o => o.status === 'open' && o.owner_side === 'internal')
+  const openCustomer = (obligations||[]).filter(o => o.status === 'open' && o.owner_side === 'customer')
   const nextMile  = (milestones||[])
     .filter(m => !m.completed_at)
     .sort((a,b) => new Date(a.due_date||'2099') - new Date(b.due_date||'2099'))[0]
@@ -269,10 +270,10 @@ function OverviewTab({ client, milestones, signals, tasks, asks }) {
         {/* stat row */}
         <div className="grid grid-cols-4 gap-3">
           {[
-            { label:'Open Tasks',    val: openTasks.length,   icon: CheckCircle2,  color:'blue' },
-            { label:'Open Asks',     val: openAsks.length,    icon: MessageSquare, color:'amber' },
-            { label:'Signals',       val: (signals||[]).length, icon: Zap,         color:'purple' },
-            { label:'Milestones',    val: (milestones||[]).length, icon: Target,   color:'green' },
+            { label:'We Owe',     val: openInternal.length,  icon: CheckCircle2,  color:'blue' },
+            { label:'They Owe',   val: openCustomer.length,  icon: MessageSquare, color:'amber' },
+            { label:'Signals',    val: (signals||[]).length, icon: Zap,           color:'purple' },
+            { label:'Milestones', val: (milestones||[]).length, icon: Target,    color:'green' },
           ].map(s => (
             <div key={s.label} className="bg-white border border-gray-200 rounded-xl p-3.5 text-center">
               <div className={`text-2xl font-bold ${s.color==='blue'?'text-blue-600':s.color==='amber'?'text-amber-600':s.color==='purple'?'text-purple-600':'text-emerald-600'}`}>
@@ -297,19 +298,19 @@ function OverviewTab({ client, milestones, signals, tasks, asks }) {
           </div>
         )}
 
-        {/* open tasks preview */}
-        {openTasks.length > 0 && (
+        {/* what we owe preview */}
+        {openInternal.length > 0 && (
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-              <p className="text-[12px] font-semibold text-gray-500 uppercase tracking-wider">Open Tasks</p>
-              <span className="text-[11px] text-gray-400">{openTasks.length}</span>
+              <p className="text-[12px] font-semibold text-gray-500 uppercase tracking-wider">What we owe</p>
+              <span className="text-[11px] text-gray-400">{openInternal.length}</span>
             </div>
-            {openTasks.slice(0,4).map(t => (
-              <div key={t.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0">
-                <PriorityDot priority={t.priority} />
-                <span className="text-[13px] text-gray-700 flex-1 truncate">{t.title}</span>
-                {t.assignee_name && <span className="text-[11px] text-gray-400 flex-shrink-0">{t.assignee_name}</span>}
-                <DuePill date={t.due_date} status={t.status} />
+            {openInternal.slice(0,4).map(o => (
+              <div key={o.id} className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 last:border-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0"/>
+                <span className="text-[13px] text-gray-700 flex-1 truncate">{o.title}</span>
+                {o.owner_name && <span className="text-[11px] text-gray-400 flex-shrink-0">{o.owner_name}</span>}
+                <DuePill date={o.due_date} status={o.status} />
               </div>
             ))}
           </div>
@@ -334,15 +335,15 @@ function OverviewTab({ client, milestones, signals, tasks, asks }) {
           </div>
         )}
 
-        {openAsks.length > 0 && (
+        {openCustomer.length > 0 && (
           <div className="bg-white border border-gray-200 rounded-xl overflow-hidden">
             <div className="px-4 py-3 border-b border-gray-100">
-              <p className="text-[12px] font-semibold text-gray-500 uppercase tracking-wider">Open Asks</p>
+              <p className="text-[12px] font-semibold text-gray-500 uppercase tracking-wider">What they owe</p>
             </div>
-            {openAsks.slice(0,4).map(a => (
-              <div key={a.id} className="px-4 py-3 border-b border-gray-50 last:border-0">
-                <p className="text-[12px] font-medium text-gray-700 line-clamp-2">{a.ask_text}</p>
-                {a.owner_name && <p className="text-[11px] text-gray-400 mt-1">{a.owner_name}</p>}
+            {openCustomer.slice(0,4).map(o => (
+              <div key={o.id} className="px-4 py-3 border-b border-gray-50 last:border-0">
+                <p className="text-[12px] font-medium text-gray-700 line-clamp-2">{o.title}</p>
+                {(o.customer_owner || o.owner_name) && <p className="text-[11px] text-gray-400 mt-1">{o.customer_owner || o.owner_name}</p>}
               </div>
             ))}
           </div>
@@ -2099,6 +2100,7 @@ export default function ClientDetail() {
 
   // prefetch counts for tab badges
   const { data: milestones } = useMilestones(clientId)
+  const { data: obligations } = useObligations(clientId)
   const { data: tasks }      = useTasks({ client_id: clientId })
   const { data: asks }       = useAsks({ client_id: clientId })
   const { data: meetings }   = useMeetings(clientId)
@@ -2128,9 +2130,7 @@ export default function ClientDetail() {
   const TABS = [
     { key:'overview',     label:'Overview',     icon: Circle,         count:0 },
     { key:'milestones',   label:'Milestones',   icon: Target,         count: (milestones||[]).filter(m=>!m.completed_at).length },
-    { key:'tasks',        label:'Tasks',        icon: CheckCircle2,   count: (tasks||[]).filter(t=>!['done','completed','cancelled'].includes(t.status)).length },
-    { key:'asks',         label:'Asks',         icon: MessageSquare,  count: (asks||[]).filter(a=>a.status==='open').length },
-    { key:'commitments',  label:'Commitments',  icon: CheckCheck,     count: (commitments||[]).filter(c=>!['fulfilled','cancelled'].includes(c.status)).length },
+    { key:'obligations',  label:'Obligations',  icon: CheckCircle2,   count: (obligations||[]).filter(o=>o.status==='open').length },
     { key:'signals',      label:'Signals',      icon: Zap,            count: openSignals.length },
     { key:'meetings',     label:'Meetings',     icon: Calendar,       count: (meetings||[]).length },
     { key:'stakeholders', label:'Stakeholders', icon: Users,          count: (stakeholders||[]).length },
@@ -2146,11 +2146,9 @@ export default function ClientDetail() {
       <TabBar tabs={TABS} active={tab} onChange={setTab} />
 
       <div className="max-w-5xl mx-auto">
-        {tab === 'overview'     && <OverviewTab client={client} milestones={milestones} signals={signals} tasks={tasks} asks={asks}/>}
+        {tab === 'overview'     && <OverviewTab client={client} milestones={milestones} signals={signals} obligations={obligations}/>}
         {tab === 'milestones'   && <MilestonesTab   clientId={clientId}/>}
-        {tab === 'tasks'        && <TasksTab         clientId={clientId}/>}
-        {tab === 'asks'         && <AsksTab          clientId={clientId}/>}
-        {tab === 'commitments'  && <CommitmentsTab   clientId={clientId}/>}
+        {tab === 'obligations'  && <ObligationsTab    clientId={clientId}/>}
         {tab === 'signals'      && <SignalsTab        clientId={clientId}/>}
         {tab === 'meetings'     && <MeetingsTab       clientId={clientId}/>}
         {tab === 'stakeholders' && <StakeholdersTab   clientId={clientId}/>}
