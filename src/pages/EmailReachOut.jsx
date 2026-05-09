@@ -453,10 +453,14 @@ export default function EmailReachOut() {
                       ) : <span className="text-xs text-gray-400">—</span>}
                     </td>
                     {/* Replies */}
-                    <td className="px-3 py-2.5">
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium">
-                        {thread.external_reply_count ?? 0}
-                      </span>
+                    <td className="px-3 py-2.5 align-top">
+                      <div className="flex flex-col gap-0.5">
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full text-xs font-medium w-fit">
+                          {thread.external_reply_count ?? 0}
+                        </span>
+                        <span className="text-[10px] text-gray-500 leading-tight">Inbound: {thread.inbound_count ?? 0}</span>
+                        <span className="text-[10px] text-gray-500 leading-tight">Outbound: {thread.outbound_count ?? 0}</span>
+                      </div>
                     </td>
                     {/* Actions */}
                     <td className="px-3 py-2.5" onClick={e => e.stopPropagation()}>
