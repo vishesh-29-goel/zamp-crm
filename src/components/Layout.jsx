@@ -3,7 +3,7 @@ import { NavLink, Outlet, Link } from 'react-router-dom'
 import {
   LayoutDashboard, Users, CheckSquare, Signal,
   BarChart2, Settings, LogOut, ChevronDown, ShieldAlert, Layers, DollarSign,
-  Bell, Clock, Zap, AlertTriangle, MessageSquare, CheckCheck, X, Send
+  Bell, Clock, Zap, AlertTriangle, MessageSquare, CheckCheck, X, Send, Mail
 } from 'lucide-react'
 import { useState, useRef, useEffect } from 'react'
 import { useAuth } from '../lib/auth'
@@ -18,6 +18,12 @@ function canSeeOutreach(user) {
   if (!z) return false
   if (OUTREACH_BYPASS_ROLES.includes(z.role)) return true
   return z.pod_id === OUTREACH_POD_ID
+}
+
+function canSeeEmailReachOut(user) {
+  const z = user?.zampian
+  if (!z) return false
+  return z.email_reach_out_access === true
 }
 
 const BASE_NAV = [
@@ -240,6 +246,22 @@ export default function Layout() {
               Outreach
             </NavLink>
           )}
+
+{/* Email Reach Out — gated by email_reach_out_access flag */}
+{canSeeEmailReachOut(user) && (
+  <NavLink
+    to="/email-reach-out"
+    className={({ isActive }) =>
+      `flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+      ${isActive
+        ? 'bg-zamp-50 text-zamp-600'
+        : 'text-gray-500 hover:bg-surface-page hover:text-gray-900'}`
+    }
+  >
+    <Mail className="w-4 h-4 flex-shrink-0" />
+    Email Reach out
+  </NavLink>
+)}
 
           {/* Approvals — visible to all, badge only for approvers with pending items */}
           <NavLink

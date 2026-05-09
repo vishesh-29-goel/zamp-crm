@@ -3,403 +3,251 @@ import { useState, useEffect, useCallback } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
 import DOMPurify from 'dompurify'
-import { format } from 'date-fns'
+import { format, differenceInHours } from 'date-fns'
 import {
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  ChevronUp,
-  Clock,
-  ExternalLink,
-  MoreVertical,
-  User,
-  X,
+  ChevronDown, ChevronRight, Clock, ExternalLink, MoreVertical, User, X,
 } from 'lucide-react'
 
-// ---------------------------------------------------------------------------
-// DOMPurify config: allow class/style for blockquotes/fonts, strip scripts
-// ---------------------------------------------------------------------------
+// DOMPurify config
 const PURIFY_CONFIG = {
-  ALLOWED_TAGS: [
-    'p','br','div','span','a','b','i','strong','em','u','s',
-    'h1','h2','h3','h4','h5','h6',
-    'ul','ol','li','blockquote','pre','code',
-    'table','thead','tbody','tr','th','td',
-    'img','hr','font','center',
-  ],
-  ALLOWED_ATTR: [
-    'href','src','alt','title','class','style','width','height',
+  ALLOWED_TAGS: ['p','br','div','span','a','b','i','strong','em','u','s',
+    'h1','h2','h3','h4','h5','h6','ul','ol','li','blockquote','pre','code',
+    'table','thead','tbody','tr','th','td','img','hr','font','center'],
+  ALLOWED_ATTR: ['href','src','alt','title','class','style','width','height',
     'align','valign','color','size','face','border','cellpadding','cellspacing',
-    'bgcolor','colspan','rowspan',
-  ],
+    'bgcolor','colspan','rowspan','target','rel'],
   ALLOW_DATA_ATTR: false,
-  FORBID_TAGS: ['script','iframe','object','embed','form','input','link'],
-  FORBID_ATTR: ['onerror','onload','onclick','onmouseover','onmouseout',
-                'onfocus','onblur','onchange','onsubmit'],
+  FORBID_TAGS: ['script','iframe','object','embed','form','input','link','meta'],
+  FORBID_ATTR: ['onerror','onload','onclick','onmouseover','onmouseout','onfocus','onblur','onchange','onsubmit'],
 }
 
 function sanitizeHtml(html) {
-  return DOMPurify.sanitize(html, PURIFY_CONFIG)
-}
-
-// ---------------------------------------------------------------------------
-// Helper: format recipients jsonb array → display string
-// ---------------------------------------------------------------------------
-function formatRecipients(arr, max = 999) {
-  if (!arr || !arr.length) return ''
-  const names = arr.map(r => {
-    if (typeof r === 'string') return r
-    return r.name || r.email || ''
-  }).filter(Boolean)
-  const shown = names.slice(0, max)
-  const rest  = names.length - shown.length
-  return shown.join(', ') + (rest > 0 ? ` +${rest} more` : '')
-}
-
-function formatRecipientsExpanded(arr) {
-  if (!arr || !arr.length) return []
-  return arr.map(r => {
-    if (typeof r === 'string') return r
-    const name  = r.name  || ''
-    const email = r.email || ''
-    if (name && email) return `${name} <${email}>`
-    return name || email
-  }).filter(Boolean)
-}
-
-// ---------------------------------------------------------------------------
-// RecipientsRow
-// ---------------------------------------------------------------------------
-function RecipientsRow({ message }) {
-  const [expanded, setExpanded] = useState(false)
-
-  const toList   = message.recipients || []
-  const ccList   = message.cc || []
-
-  const collapsedLabel = formatRecipients(toList, 5)
-  const toFull   = formatRecipientsExpanded(toList)
-  const ccFull   = formatRecipientsExpanded(ccList)
-
-  return (
-    <div className="text-sm text-slate-600 mb-4">
-      <div className="flex items-start gap-1">
-        <span className="text-slate-400 shrink-0 mt-0.5">to</span>
-        <span className="flex-1 text-slate-700">
-          {expanded ? toFull.join(', ') : collapsedLabel}
-        </span>
-        <button
-          onClick={() => setExpanded(e => !e)}
-          className="text-slate-400 hover:text-slate-600 shrink-0 mt-0.5"
-          title={expanded ? 'Collapse' : 'Expand recipients'}
-        >
-          {expanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-        </button>
-      </div>
-      {expanded && ccList.length > 0 && (
-        <div className="flex items-start gap-1 mt-1">
-          <span className="text-slate-400 shrink-0 mt-0.5">cc</span>
-          <span className="flex-1 text-slate-600">{ccFull.join(', ')}</span>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// BodyCard
-// ---------------------------------------------------------------------------
-function BodyCard({ message }) {
-  const hasHtml = !!message.email_html
-
-  if (hasHtml) {
-    const clean = sanitizeHtml(message.email_html)
-    return (
-      <div className="rounded-xl border border-slate-200 shadow-sm bg-white px-6 py-5 mb-4 email-body-card">
-        <style>{`
-          .email-body-card blockquote {
-            border-left: 2px solid #cbd5e1;
-            margin-left: 0;
-            padding-left: 1rem;
-            color: #64748b;
-          }
-          .email-body-card a { color: #4f46e5; }
-          .email-body-card img { max-width: 100%; height: auto; }
-          .email-body-card table { border-collapse: collapse; }
-        `}</style>
-        <div
-          className="text-sm text-slate-800 leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: clean }}
-        />
-      </div>
-    )
+  if (!html) return ''
+  try {
+    const clean = DOMPurify.sanitize(html, PURIFY_CONFIG)
+    return clean.replace(/<a\s/gi, '<a target=\"_blank\" rel=\"noopener noreferrer\" ')
+  } catch (err) {
+    console.error('[EmailModal] DOMPurify error:', err)
+    return ''
   }
+}
 
-  // Plain text fallback
-  const text = message.body_text || message.body_summary || '(no content)'
+function plaintextToHtml(text) {
+  if (!text) return ''
+  const lines2 = text.split('\n')
+  const parsed = lines2.map(line => {
+    let depth = 0; let rest = line
+    while (rest.match(/^>\s?/)) { rest = rest.replace(/^>\s?/, ''); depth++ }
+    return { depth, content: rest }
+  })
+  let html = ''; let currentDepth = 0
+  for (const { depth, content } of parsed) {
+    if (depth > currentDepth) { for (let i=currentDepth;i<depth;i++) html+='<blockquote>' }
+    else if (depth < currentDepth) { for (let i=currentDepth;i>depth;i--) html+='</blockquote>' }
+    currentDepth = depth
+    const esc = content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    html += esc + '<br>'
+  }
+  for (let i=currentDepth;i>0;i--) html += '</blockquote>'
+  return html
+}
+
+function gapLabel(dateA, dateB) {
+  if (!dateA || !dateB) return null
+  const hours = differenceInHours(new Date(dateB), new Date(dateA))
+  if (hours < 1) return 'Reply — same day'
+  if (hours < 24) return `Reply — ${hours} ${hours === 1 ? 'hour' : 'hours'} later`
+  const days = Math.floor(hours / 24)
+  return `Reply — ${days} ${days === 1 ? 'day' : 'days'} later`
+}
+
+function DirectionPill({ message }) {
+  // @zamp.ai sender_email is the canonical signal (direction field can be stale/wrong in DB)
+  // Fall back to direction field only when sender_email is absent or has no domain
+  const senderEmail = (message.sender_email || '').toLowerCase()
+  let isOutbound
+  if (senderEmail.includes('@')) {
+    isOutbound = senderEmail.endsWith('@zamp.ai')
+  } else {
+    // No usable sender_email — fall back to direction field
+    isOutbound = message.direction === 'outbound'
+  }
   return (
-    <div className="rounded-xl border border-slate-200 shadow-sm bg-white px-6 py-5 mb-4">
-      <pre className="text-sm text-slate-800 whitespace-pre-wrap font-sans leading-relaxed">{text}</pre>
-    </div>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+      isOutbound ? 'bg-indigo-100 text-indigo-700' : 'bg-emerald-100 text-emerald-700'
+    }`}>
+      {isOutbound ? 'Outbound' : 'Inbound'}
+    </span>
   )
 }
 
-// ---------------------------------------------------------------------------
-// SummaryCard — AI-generated email summary with auto-fire, cache update, regenerate
-// ---------------------------------------------------------------------------
-function SummaryCard({ message, qc, threadId }) {
+function BodyCard({ message }) {
+  let renderedHtml = null
+  if (message.body_html) {
+    const clean = sanitizeHtml(message.body_html)
+    if (clean.trim().length > 0) { renderedHtml = clean }
+  }
+  if (!renderedHtml && message.email_html) {
+    const clean = sanitizeHtml(message.email_html)
+    if (clean.trim().length > 0) { renderedHtml = clean }
+  }
+  if (!renderedHtml && message.body_text) { renderedHtml = plaintextToHtml(message.body_text) }
+  if (!renderedHtml && message.body_summary) { renderedHtml = plaintextToHtml(message.body_summary) }
+  if (!renderedHtml) {
+    return <p className='text-sm text-slate-400 italic'>Body unavailable for this message.</p>
+  }
+  return (
+    <div className='email-body text-sm leading-relaxed'
+      dangerouslySetInnerHTML={{ __html: renderedHtml }} />
+  )
+}
+
+function SummaryCard({ latestMessage, qc, threadId }) {
   const [isRegenerating, setIsRegenerating] = React.useState(false)
   const [menuOpen, setMenuOpen] = React.useState(false)
-
   const summarizeMutation = useMutation({
-    mutationFn: ({ force } = {}) =>
-      api.emailReachOutSummarize(message.id, force ? { force: true } : undefined),
+    mutationFn: ({ force } = {}) => api.emailReachOutSummarize(latestMessage.id, force ? { force: true } : undefined),
     onSuccess: (data) => {
-      setIsRegenerating(false)
-      setMenuOpen(false)
+      setIsRegenerating(false); setMenuOpen(false)
       qc.setQueryData(['email-messages', threadId], (old) => {
         if (!old) return old
-        return {
-          ...old,
-          messages: old.messages.map((m) =>
-            m.id === message.id ? { ...m, ai_summary: data.ai_summary } : m
-          ),
-        }
+        return { ...old, messages: old.messages.map((m) => m.id === latestMessage.id ? { ...m, ai_summary: data.ai_summary } : m) }
       })
     },
-    onError: () => {
-      setIsRegenerating(false)
-    },
+    onError: () => { setIsRegenerating(false) },
   })
-
   React.useEffect(() => {
-    if (message.ai_summary === null && !summarizeMutation.isPending && !summarizeMutation.isError) {
+    if (latestMessage.ai_summary === null && !summarizeMutation.isPending && !summarizeMutation.isError) {
       summarizeMutation.mutate({})
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [message.id, message.ai_summary])
-
-  const isLoading =
-    (summarizeMutation.isPending && !isRegenerating) ||
-    (message.ai_summary === null && !summarizeMutation.isError)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [latestMessage.id, latestMessage.ai_summary])
+  const isLoading = (summarizeMutation.isPending && !isRegenerating) || (latestMessage.ai_summary === null && !summarizeMutation.isError)
   const isRegenLoading = summarizeMutation.isPending && isRegenerating
-  const summaryText = isRegenerating
-    ? null
-    : (summarizeMutation.data?.ai_summary ?? message.ai_summary)
-
-  const handleRegenerate = () => {
-    setIsRegenerating(true)
-    setMenuOpen(false)
-    summarizeMutation.mutate({ force: true })
-  }
-
+  const summaryText = isRegenerating ? null : (summarizeMutation.data?.ai_summary ?? latestMessage.ai_summary)
   return (
-    <div className="rounded-xl bg-indigo-50 border border-indigo-100 px-5 py-4 mb-4 relative">
-      <div className="flex items-center justify-between mb-1.5">
-        <span className="text-indigo-700 font-semibold text-sm">Email Summary</span>
-        <div className="relative">
-          <button
-            onClick={() => setMenuOpen((o) => !o)}
-            className="p-1 rounded hover:bg-indigo-100 text-indigo-400 hover:text-indigo-600"
-            title="Summary options"
-          >
-            <MoreVertical className="w-3.5 h-3.5" />
+    <div className='rounded-xl bg-indigo-50 border border-indigo-100 px-5 py-4 mb-4 relative'>
+      <div className='flex items-center justify-between mb-1.5'>
+        <span className='text-indigo-700 font-semibold text-sm'>Email Summary</span>
+        <div className='relative'>
+          <button onClick={() => setMenuOpen(o => !o)} className='p-1 rounded hover:bg-indigo-100 text-indigo-400 hover:text-indigo-600' title='Summary options'>
+            <MoreVertical className='w-3.5 h-3.5' />
           </button>
           {menuOpen && (
-            <div className="absolute right-0 top-6 z-10 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[130px]">
-              <button
-                onClick={handleRegenerate}
-                disabled={isRegenLoading}
-                className="w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-              >
+            <div className='absolute right-0 top-6 z-10 bg-white rounded-lg shadow-lg border border-slate-200 py-1 min-w-[130px]'>
+              <button onClick={() => { setIsRegenerating(true); setMenuOpen(false); summarizeMutation.mutate({ force: true }) }}
+                disabled={isRegenLoading} className='w-full text-left px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-50'>
                 Regenerate
               </button>
             </div>
           )}
         </div>
       </div>
+      {summarizeMutation.isError && !isRegenLoading
+        ? <p className='text-xs text-red-500 italic'>Couldn&#39;t generate summary &#8212; click Regenerate to retry</p>
+        : (isLoading || isRegenLoading || !summaryText)
+        ? <p className='text-indigo-400 text-sm italic'>Generating summary…</p>
+        : <p className='text-indigo-900 text-sm leading-relaxed'>{summaryText}</p>
+      }
+    </div>
+  )
+}
 
-      {summarizeMutation.isError && !isRegenLoading ? (
-        <p className="text-xs text-red-500 italic">
-          Couldn&#39;t generate summary &#8212; click Regenerate to retry
-        </p>
-      ) : isLoading || isRegenLoading || !summaryText ? (
-        <p className="text-indigo-400 text-sm italic">Generating summary…</p>
-      ) : (
-        <p className="text-indigo-900 text-sm leading-relaxed">{summaryText}</p>
+function positionLabel(index) {
+  if (index === 0) return 'Original message'
+  return `Follow-up #${index}`
+}
+
+function MessageCard({ message, index, isExpanded, onToggle }) {
+  const timestamp = message.received_at ? format(new Date(message.received_at), 'dd/MM/yyyy HH:mm') : '—'
+  const senderDisplay = message.sender_name
+    ? `${message.sender_name} <${message.sender_email || ''}>`
+    : (message.sender_email || 'Unknown sender')
+  return (
+    <div className='rounded-xl border border-slate-200 shadow-sm bg-white overflow-hidden'>
+      <div className='flex items-center gap-3 px-5 py-3 cursor-pointer hover:bg-slate-50 transition-colors select-none' onClick={onToggle}>
+        <span className='text-slate-400 shrink-0'>
+          {isExpanded ? <ChevronDown className='w-4 h-4' /> : <ChevronRight className='w-4 h-4' />}
+        </span>
+        <span className='text-xs font-semibold text-slate-500 shrink-0 w-32'>{positionLabel(index)}</span>
+        <div className='flex items-center gap-1.5 min-w-0 flex-1'>
+          <User className='w-3.5 h-3.5 text-slate-400 shrink-0' />
+          <span className='text-sm text-slate-700 truncate'>{senderDisplay}</span>
+        </div>
+        <DirectionPill message={message} />
+        <div className='flex items-center gap-1 text-xs text-slate-400 shrink-0'>
+          <Clock className='w-3 h-3' />
+          <span>{timestamp}</span>
+        </div>
+      </div>
+      {isExpanded && (
+        <div className='px-5 pb-5 pt-3 border-t border-slate-100'>
+          <BodyCard message={message} />
+        </div>
       )}
     </div>
   )
 }
 
+function InterMessageDivider({ prevMessage, nextMessage }) {
+  const label = gapLabel(prevMessage?.received_at, nextMessage?.received_at)
+  return (
+    <div className='flex items-center gap-3 my-3'>
+      <div className='flex-1 h-px bg-slate-200' />
+      <span className='text-xs text-slate-400 shrink-0 whitespace-nowrap'>{label || 'Reply'}</span>
+      <div className='flex-1 h-px bg-slate-200' />
+    </div>
+  )
+}
 
-// ---------------------------------------------------------------------------
-// Main modal
-// ---------------------------------------------------------------------------
 export default function EmailMessageModal({ thread, onClose }) {
   const qc = useQueryClient()
-  const [cursor, setCursor] = useState(null) // index into messages array
-
   const { data, isLoading } = useQuery({
     queryKey: ['email-messages', thread.id],
     queryFn: () => api.emailReachOutMessages(thread.id),
     enabled: !!thread.id,
   })
-
   const messages = data?.messages || []
-
-  // Default to latest message
-  useEffect(() => {
-    if (messages.length > 0 && cursor === null) {
-      setCursor(messages.length - 1)
-    }
-  }, [messages.length, cursor])
-
-  // Reset cursor when thread changes (shouldn't normally happen, but safety)
-  useEffect(() => {
-    setCursor(null)
-  }, [thread.id])
-
-  const currentMessage = cursor !== null ? messages[cursor] : null
-  const totalMessages  = messages.length
-
-  // Keyboard nav
-  const handleKey = useCallback((e) => {
-    if (e.key === 'Escape') { onClose(); return }
-    if (e.key === 'ArrowLeft'  && cursor > 0)                setCursor(c => c - 1)
-    if (e.key === 'ArrowRight' && cursor < totalMessages - 1) setCursor(c => c + 1)
-  }, [onClose, cursor, totalMessages])
-
+  const [expandedMap, setExpandedMap] = useState({})
+  useEffect(() => { setExpandedMap({}) }, [thread.id])
+  const isExpanded = useCallback((index) => expandedMap[index] !== false, [expandedMap])
+  const toggleCard = useCallback((index) => {
+    setExpandedMap(prev => ({ ...prev, [index]: prev[index] === false ? true : false }))
+  }, [])
+  const handleKey = useCallback((e) => { if (e.key === 'Escape') onClose() }, [onClose])
   useEffect(() => {
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [handleKey])
-
-  // Format timestamp
-  const timestamp = currentMessage?.received_at
-    ? format(new Date(currentMessage.received_at), 'dd/MM/yyyy HH:mm')
-    : '—'
-
+  const latestMessage = messages.length > 0 ? messages[messages.length - 1] : null
   return (
-    /* Backdrop */
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      onClick={onClose}
-    >
-      {/* Modal panel — stop propagation so clicking inside doesn't close */}
-      <div
-        className="bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-[900px] max-h-[90vh]"
-        onClick={e => e.stopPropagation()}
-      >
-        {/* ── Header ── */}
-        <div className="px-6 pt-5 pb-4 border-b border-slate-100 shrink-0">
-          {/* Subject + close */}
-          <div className="flex items-start justify-between gap-4 mb-3">
-            <h2 className="text-lg font-bold text-slate-900 leading-snug">
-              {thread.subject || '(no subject)'}
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 shrink-0"
-            >
-              <X className="w-4 h-4" />
-            </button>
+    <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4' onClick={onClose}>
+      <div className='bg-white rounded-2xl shadow-2xl flex flex-col w-full max-w-[900px] max-h-[90vh] overflow-hidden' onClick={e => e.stopPropagation()}>
+        <div className='px-6 pt-5 pb-4 border-b border-slate-100 shrink-0'>
+          <div className='flex items-start justify-between gap-4'>
+            <h2 className='text-lg font-bold text-slate-900 leading-snug'>{thread.subject || '(no subject)'}</h2>
+            <button onClick={onClose} className='p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-600 shrink-0'><X className='w-4 h-4' /></button>
           </div>
-
-          {/* From / timestamp row */}
-          {currentMessage && (
-            <div className="flex items-center justify-between gap-4 mb-3">
-              <div className="flex items-center gap-2 text-sm text-slate-600 min-w-0">
-                <User className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                <span className="font-medium text-slate-500 shrink-0">From:</span>
-                <span className="font-semibold text-slate-800 truncate">
-                  {currentMessage.sender_name || currentMessage.sender_email}
-                </span>
-                {currentMessage.sender_email && currentMessage.sender_name && (
-                  <span className="text-slate-400 text-xs truncate">
-                    &lt;{currentMessage.sender_email}&gt;
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center gap-1.5 text-xs text-slate-500 shrink-0">
-                <Clock className="w-3.5 h-3.5 text-slate-400" />
-                <span>{timestamp}</span>
-              </div>
-            </div>
-          )}
-
-          {/* Divider */}
-          <hr className="border-slate-100 mb-3" />
-
-          {/* Recipients row */}
-          {currentMessage && <RecipientsRow message={currentMessage} />}
         </div>
-
-        {/* ── Scrollable body ── */}
-        <div className="flex-1 overflow-y-auto px-6 py-4">
-          {isLoading && (
-            <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
-              Loading messages…
+        <div className='flex-1 min-h-0 overflow-y-auto px-6 py-4'>
+          {isLoading && <div className='flex items-center justify-center py-16 text-slate-400 text-sm'>Loading messages…</div>}
+          {!isLoading && messages.length === 0 && (
+            <div className='flex items-center justify-center py-16 text-slate-500 text-sm italic'>
+              No messages found for this thread — the data may not have backfilled correctly.
             </div>
           )}
-
-          {!isLoading && !currentMessage && messages.length === 0 && (
-            <div className="flex items-center justify-center py-16 text-slate-400 text-sm">
-              No messages in this thread.
-            </div>
-          )}
-
-          {currentMessage && (
-            <>
-              <SummaryCard
-                message={currentMessage}
-                qc={qc}
-                threadId={thread.id}
-              />
-              <BodyCard message={currentMessage} />
-            </>
-          )}
+          {!isLoading && latestMessage && <SummaryCard latestMessage={latestMessage} qc={qc} threadId={thread.id} />}
+          {!isLoading && messages.map((msg, idx) => (
+            <React.Fragment key={msg.id}>
+              {idx > 0 && <InterMessageDivider prevMessage={messages[idx - 1]} nextMessage={msg} />}
+              <MessageCard message={msg} index={idx} isExpanded={isExpanded(idx)} onToggle={() => toggleCard(idx)} />
+            </React.Fragment>
+          ))}
         </div>
-
-        {/* ── Footer ── */}
-        <div className="px-6 py-3 border-t border-slate-100 flex items-center justify-between shrink-0 bg-slate-50 rounded-b-2xl">
-          {/* Navigation */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setCursor(c => Math.max(0, c - 1))}
-              disabled={!currentMessage || cursor <= 0}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-slate-600
-                         border border-slate-200 bg-white hover:bg-slate-50
-                         disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              <ChevronLeft className="w-3.5 h-3.5" />
-              Previous email in thread
-            </button>
-            {totalMessages > 0 && cursor !== null && (
-              <span className="text-xs text-slate-400">
-                {cursor + 1} of {totalMessages}
-              </span>
-            )}
-            <button
-              onClick={() => setCursor(c => Math.min(totalMessages - 1, c + 1))}
-              disabled={!currentMessage || cursor >= totalMessages - 1}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs text-slate-600
-                         border border-slate-200 bg-white hover:bg-slate-50
-                         disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-            >
-              Next email in thread
-              <ChevronRight className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          {/* Gmail link */}
+        <div className='px-6 py-3 border-t border-slate-100 flex items-center justify-end shrink-0 bg-slate-50 rounded-b-2xl'>
           {thread.gmail_link && (
-            <a
-              href={thread.gmail_link}
-              target="_blank"
-              rel="noreferrer"
-              className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 hover:underline"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
+            <a href={thread.gmail_link} target='_blank' rel='noreferrer' className='flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 hover:underline'>
+              <ExternalLink className='w-3.5 h-3.5' />
               Open in Gmail
             </a>
           )}

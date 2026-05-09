@@ -13,6 +13,7 @@ import Pods from './pages/Pods'
 import Settings from './pages/Settings'
 import Revenue from './pages/Revenue'
 import Outreach from './pages/Outreach'
+import EmailReachOut from './pages/EmailReachOut'
 
 function ProtectedRoute({ children }) {
   const { user } = useAuth()
@@ -50,6 +51,7 @@ export default function App() {
         <Route path="revenue" element={<Revenue />} />
         <Route path="outreach" element={<Outreach />} />
         <Route path="outreach/:jobId" element={<Outreach />} />
+        <Route path="email-reach-out" element={<EmailReachOut />} />
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
     </Routes>
